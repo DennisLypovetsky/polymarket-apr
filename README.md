@@ -8,6 +8,10 @@ The latest Chrome version is available in the Chrome Web Store:
 
 - https://chromewebstore.google.com/detail/polymarket-apr/dainflhaaolcjggcopmjhpaodnleicib
 
+## Preview
+
+<img src="pictures/screenshots/Screenshot.png" alt="Polymarket APR extension preview" width="960" />
+
 ## Local Development
 
 1. Open `chrome://extensions`.
