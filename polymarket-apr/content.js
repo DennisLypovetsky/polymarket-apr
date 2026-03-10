@@ -75,8 +75,14 @@
   }
 
   // ---------- DATE ----------
-  const KYIV_TZ = 'Europe/Kyiv';
-  const WEEK_OF_RE = /^Week of\s+([A-Za-z]+)\s+(\d{1,2})$/i;
+  const WEEK_OF_RE = /^Week of\s+([A-Za-z]+)\s+(\d{1,2})(?:,\s*(\d{4}))?$/i;
+  const DATE_LABEL_RE = /^(?:by\s+)?([A-Za-z]+)\s+(\d{1,2})(?:,\s*(\d{4}))?$/i;
+  const WEEK_OF_FREE_RE = /\bWeek of\s+([A-Za-z]+)\s+(\d{1,2})(?:,\s*(\d{4}))?\b/i;
+  const DATE_FREE_RE = /\b(?:by\s+)?([A-Za-z]+)\s+(\d{1,2})(?:,\s*(\d{4}))?\b/i;
+  const IANA_TZ_RE = /\b([A-Za-z_]+\/[A-Za-z_]+(?:\/[A-Za-z_]+)?)\b/g;
+  const RULES_START_RE = /^This market will resolve/i;
+  const EXPLICIT_TIME_RE = /\b(\d{1,2})(?::(\d{2}))?\s*(AM|PM)\b/i;
+
   const MONTH_INDEX = {
     jan: 0, january: 0,
     feb: 1, february: 1,
@@ -91,6 +97,45 @@
     nov: 10, november: 10,
     dec: 11, december: 11,
   };
+
+  const TZ_ALIAS = [
+    { re: /\bEastern European Time\b/i, timeZone: 'Europe/Kyiv' },
+    { re: /\bEEST\b/i, timeZone: 'Europe/Kyiv' },
+    { re: /\bEET\b/i, timeZone: 'Europe/Kyiv' },
+    { re: /\bEastern Time\b/i, timeZone: 'America/New_York' },
+    { re: /\bEDT\b/i, timeZone: 'America/New_York' },
+    { re: /\bEST\b/i, timeZone: 'America/New_York' },
+    { re: /\bET\b/i, timeZone: 'America/New_York' },
+    { re: /\bUTC\b/i, timeZone: 'UTC' },
+    { re: /\bGMT\b/i, timeZone: 'UTC' },
+  ];
+
+  function normalizeSpaces(text) {
+    return (text || '').replace(/\s+/g, ' ').trim();
+  }
+
+  function isValidDate(date) {
+    return date instanceof Date && isFinite(date.getTime());
+  }
+
+  function isValidIanaTimeZone(timeZone) {
+    try {
+      new Intl.DateTimeFormat('en-US', { timeZone }).format(new Date());
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  function isValidCalendarDate(year, monthIndex, day) {
+    if (!Number.isInteger(year) || !Number.isInteger(monthIndex) || !Number.isInteger(day)) return false;
+    if (day < 1 || day > 31) return false;
+
+    const d = new Date(Date.UTC(year, monthIndex, day));
+    return d.getUTCFullYear() === year &&
+      d.getUTCMonth() === monthIndex &&
+      d.getUTCDate() === day;
+  }
 
   function getEventJsonLd() {
     const scripts = document.querySelectorAll('script[type="application/ld+json"]');
@@ -142,57 +187,149 @@
     return new Date(utcMs);
   }
 
-  function getKyivCurrentYear() {
-    const yearStr = new Intl.DateTimeFormat('en-US', {
-      timeZone: KYIV_TZ,
-      year: 'numeric',
-    }).format(new Date());
-    return parseInt(yearStr, 10);
+  function getCurrentYearInTimeZone(timeZone) {
+    try {
+      const yearStr = new Intl.DateTimeFormat('en-US', {
+        timeZone,
+        year: 'numeric',
+      }).format(new Date());
+      const year = parseInt(yearStr, 10);
+      return Number.isInteger(year) ? year : null;
+    } catch {
+      return null;
+    }
   }
 
-  function parseStartYear(startDateIso) {
-    if (!startDateIso) return null;
-    const d = new Date(startDateIso);
-    if (!isFinite(d.getTime())) return null;
-    return d.getUTCFullYear();
+  function resolveTimeZoneFromText(text) {
+    if (!text) return null;
+
+    const normalized = normalizeSpaces(text);
+    const ianaMatches = normalized.match(IANA_TZ_RE) || [];
+    for (const match of ianaMatches) {
+      if (isValidIanaTimeZone(match)) return match;
+    }
+
+    for (const alias of TZ_ALIAS) {
+      if (alias.re.test(normalized)) return alias.timeZone;
+    }
+
+    return null;
   }
 
-  function parseWeekOfLabel(text) {
-    const normalized = (text || '').replace(/\s+/g, ' ').trim();
-    const match = normalized.match(WEEK_OF_RE);
+  function getRulesText() {
+    const scope = document.querySelector('main') || document.body;
+    if (!scope) return null;
+
+    const candidates = [];
+    for (const el of scope.querySelectorAll('p, div, span')) {
+      const text = normalizeSpaces(el.textContent || '');
+      if (text.length < 80) continue;
+      if (!RULES_START_RE.test(text)) continue;
+      candidates.push(text);
+    }
+
+    if (!candidates.length) return null;
+
+    const best = candidates.sort((a, b) => b.length - a.length)[0];
+    const trimmed = normalizeSpaces(best.split(/Market Opened:/i)[0] || best);
+    return trimmed || null;
+  }
+
+  function parseRulesCutoff() {
+    const rulesText = getRulesText();
+    if (!rulesText) return null;
+
+    const explicit = rulesText.match(EXPLICIT_TIME_RE);
+    if (explicit) {
+      const hour12 = parseInt(explicit[1], 10);
+      const minute = explicit[2] ? parseInt(explicit[2], 10) : 0;
+      const meridiem = explicit[3].toUpperCase();
+
+      if (!Number.isInteger(hour12) || hour12 < 1 || hour12 > 12) return null;
+      if (!Number.isInteger(minute) || minute < 0 || minute > 59) return null;
+
+      let hour = hour12 % 12;
+      if (meridiem === 'PM') hour += 12;
+
+      const idx = explicit.index || 0;
+      const nearTime = rulesText.slice(
+        Math.max(0, idx - 24),
+        Math.min(rulesText.length, idx + explicit[0].length + 100)
+      );
+
+      const timeZone = resolveTimeZoneFromText(nearTime) || resolveTimeZoneFromText(rulesText);
+      if (!timeZone) return null;
+
+      return { timeZone, hour, minute, second: 59 };
+    }
+
+    const timeZone = resolveTimeZoneFromText(rulesText);
+    if (!timeZone) return null;
+
+    return { timeZone, hour: 23, minute: 59, second: 59 };
+  }
+
+  function parseOutcomeMatch(match, kind) {
     if (!match) return null;
 
-    const monthKey = match[1].toLowerCase();
+    const monthKey = (match[1] || '').toLowerCase();
     const monthIndex = MONTH_INDEX[monthKey];
     const day = parseInt(match[2], 10);
+    const year = match[3] ? parseInt(match[3], 10) : null;
 
-    if (!Number.isInteger(monthIndex) || !Number.isInteger(day)) return null;
-    return { monthIndex, day };
+    if (!Number.isInteger(monthIndex)) return null;
+    if (!Number.isInteger(day) || day < 1 || day > 31) return null;
+    if (match[3] && (!Number.isInteger(year) || year < 1900 || year > 3000)) return null;
+
+    return { kind, monthIndex, day, year };
   }
 
-  function extractWeekOfFromElement(root) {
+  function parseOutcomeLabelExact(text) {
+    const normalized = normalizeSpaces(text);
+    if (!normalized) return null;
+
+    return parseOutcomeMatch(normalized.match(WEEK_OF_RE), 'week') ||
+      parseOutcomeMatch(normalized.match(DATE_LABEL_RE), 'date');
+  }
+
+  function parseOutcomeLabelLoose(text) {
+    const normalized = normalizeSpaces(text);
+    if (!normalized) return null;
+
+    return parseOutcomeMatch(normalized.match(WEEK_OF_FREE_RE), 'week') ||
+      parseOutcomeMatch(normalized.match(DATE_FREE_RE), 'date');
+  }
+
+  function extractOutcomeDateParts(root) {
     if (!root) return null;
 
-    const direct = parseWeekOfLabel(root.textContent || '');
-    if (direct) return direct;
+    const nodes = [root, ...root.querySelectorAll('*')];
 
-    for (const el of root.querySelectorAll('*')) {
-      const parsed = parseWeekOfLabel(el.textContent || '');
+    for (const node of nodes) {
+      const parsed = parseOutcomeLabelExact(node.textContent || '');
+      if (parsed) return parsed;
+    }
+
+    for (const node of nodes) {
+      const text = normalizeSpaces(node.textContent || '');
+      if (!text || text.length > 260) continue;
+
+      const parsed = parseOutcomeLabelLoose(text);
       if (parsed) return parsed;
     }
 
     return null;
   }
 
-  function parseWeekOfFromOpenOutcome() {
-    const fromOutcomesList = extractWeekOfFromElement(
+  function getActiveOutcomeDateParts() {
+    const fromOutcomesList = extractOutcomeDateParts(
       document.querySelector('#outcomes [data-state="open"]')
     );
     if (fromOutcomesList) return fromOutcomesList;
 
     // Newer DOM may not expose #outcomes[data-state="open"]; selected outcome
     // label still exists inside trade widget.
-    const fromTradeWidget = extractWeekOfFromElement(
+    const fromTradeWidget = extractOutcomeDateParts(
       document.querySelector('#trade-widget')
     );
     if (fromTradeWidget) return fromTradeWidget;
@@ -200,26 +337,60 @@
     return null;
   }
 
-  function getWeekOutcomeEndDate(startDateIso) {
-    const parsed = parseWeekOfFromOpenOutcome();
-    if (!parsed) return null;
+  function buildOutcomeEndDate(dateParts, year, cutoff) {
+    if (!dateParts || !cutoff) return null;
+    if (!isValidCalendarDate(year, dateParts.monthIndex, dateParts.day)) return null;
 
-    const year = parseStartYear(startDateIso) || getKyivCurrentYear();
-    if (!Number.isInteger(year)) return null;
+    if (dateParts.kind === 'week') {
+      const mondayUtc = Date.UTC(year, dateParts.monthIndex, dateParts.day, 0, 0, 0);
+      const sundayUtc = new Date(mondayUtc + (6 * 86400000));
 
-    // Label means Monday date; resolution window ends Sunday 23:59:59 (Kyiv).
-    const mondayUtc = Date.UTC(year, parsed.monthIndex, parsed.day, 0, 0, 0);
-    const sundayUtc = new Date(mondayUtc + (6 * 86400000));
+      return makeDateInTimeZone(
+        sundayUtc.getUTCFullYear(),
+        sundayUtc.getUTCMonth(),
+        sundayUtc.getUTCDate(),
+        cutoff.hour,
+        cutoff.minute,
+        cutoff.second,
+        cutoff.timeZone
+      );
+    }
 
     return makeDateInTimeZone(
-      sundayUtc.getUTCFullYear(),
-      sundayUtc.getUTCMonth(),
-      sundayUtc.getUTCDate(),
-      23,
-      59,
-      59,
-      KYIV_TZ
+      year,
+      dateParts.monthIndex,
+      dateParts.day,
+      cutoff.hour,
+      cutoff.minute,
+      cutoff.second,
+      cutoff.timeZone
     );
+  }
+
+  function getFallbackDateFromRules(startDateIso) {
+    const cutoff = parseRulesCutoff();
+    if (!cutoff) return null;
+
+    const dateParts = getActiveOutcomeDateParts();
+    if (!dateParts) return null;
+
+    const startDate = startDateIso ? new Date(startDateIso) : null;
+    const safeStartDate = isValidDate(startDate) ? startDate : null;
+    let year = dateParts.year ||
+      (safeStartDate ? safeStartDate.getUTCFullYear() : getCurrentYearInTimeZone(cutoff.timeZone));
+
+    if (!Number.isInteger(year)) return null;
+
+    let endDate = buildOutcomeEndDate(dateParts, year, cutoff);
+    if (!isValidDate(endDate)) return null;
+
+    if (!dateParts.year && safeStartDate && endDate.getTime() < safeStartDate.getTime()) {
+      year += 1;
+      endDate = buildOutcomeEndDate(dateParts, year, cutoff);
+      if (!isValidDate(endDate)) return null;
+    }
+
+    return endDate;
   }
 
   function getSmartDate() {
@@ -227,11 +398,11 @@
 
     if (eventData?.endDate) {
       const endDate = new Date(eventData.endDate);
-      if (isFinite(endDate.getTime())) return endDate;
+      if (isValidDate(endDate)) return endDate;
     }
 
-    const weekEndDate = getWeekOutcomeEndDate(eventData?.startDate || null);
-    if (weekEndDate && isFinite(weekEndDate.getTime())) return weekEndDate;
+    const fallbackDate = getFallbackDateFromRules(eventData?.startDate || null);
+    if (isValidDate(fallbackDate)) return fallbackDate;
 
     return null;
   }
