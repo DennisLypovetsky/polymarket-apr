@@ -87,14 +87,164 @@
   }
 
   // ---------- DATE ----------
-  function getSmartDate() {
+  const KYIV_TZ = 'Europe/Kyiv';
+  const WEEK_OF_RE = /^Week of\s+([A-Za-z]+)\s+(\d{1,2})$/i;
+  const MONTH_INDEX = {
+    jan: 0, january: 0,
+    feb: 1, february: 1,
+    mar: 2, march: 2,
+    apr: 3, april: 3,
+    may: 4,
+    jun: 5, june: 5,
+    jul: 6, july: 6,
+    aug: 7, august: 7,
+    sep: 8, sept: 8, september: 8,
+    oct: 9, october: 9,
+    nov: 10, november: 10,
+    dec: 11, december: 11,
+  };
+
+  function getEventJsonLd() {
     const scripts = document.querySelectorAll('script[type="application/ld+json"]');
     for (const s of scripts) {
       try {
         const data = JSON.parse(s.textContent || '');
-        if (data?.endDate) return new Date(data.endDate);
+        if (data?.['@type'] === 'Event') return data;
       } catch { }
     }
+    return null;
+  }
+
+  function parseOffsetMinutesFromTzName(tzName) {
+    const m = (tzName || '').match(/GMT([+-]\d{1,2})(?::?(\d{2}))?/i);
+    if (!m) return 0;
+
+    const hours = parseInt(m[1], 10);
+    const minutes = m[2] ? parseInt(m[2], 10) : 0;
+    const sign = hours >= 0 ? 1 : -1;
+    return (hours * 60) + (sign * minutes);
+  }
+
+  function getTimeZoneOffsetMinutes(date, timeZone) {
+    const parts = new Intl.DateTimeFormat('en-US', {
+      timeZone,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+      timeZoneName: 'shortOffset',
+    }).formatToParts(date);
+
+    const tzName = parts.find((p) => p.type === 'timeZoneName')?.value || 'GMT+0';
+    return parseOffsetMinutesFromTzName(tzName);
+  }
+
+  function makeDateInTimeZone(year, monthIndex, day, hour, minute, second, timeZone) {
+    const baseUtc = Date.UTC(year, monthIndex, day, hour, minute, second);
+    let utcMs = baseUtc;
+
+    // Iterate to lock correct offset for the target local date/time.
+    for (let i = 0; i < 2; i++) {
+      const offsetMin = getTimeZoneOffsetMinutes(new Date(utcMs), timeZone);
+      utcMs = baseUtc - (offsetMin * 60000);
+    }
+
+    return new Date(utcMs);
+  }
+
+  function getKyivCurrentYear() {
+    const yearStr = new Intl.DateTimeFormat('en-US', {
+      timeZone: KYIV_TZ,
+      year: 'numeric',
+    }).format(new Date());
+    return parseInt(yearStr, 10);
+  }
+
+  function parseStartYear(startDateIso) {
+    if (!startDateIso) return null;
+    const d = new Date(startDateIso);
+    if (!isFinite(d.getTime())) return null;
+    return d.getUTCFullYear();
+  }
+
+  function parseWeekOfLabel(text) {
+    const normalized = (text || '').replace(/\s+/g, ' ').trim();
+    const match = normalized.match(WEEK_OF_RE);
+    if (!match) return null;
+
+    const monthKey = match[1].toLowerCase();
+    const monthIndex = MONTH_INDEX[monthKey];
+    const day = parseInt(match[2], 10);
+
+    if (!Number.isInteger(monthIndex) || !Number.isInteger(day)) return null;
+    return { monthIndex, day };
+  }
+
+  function extractWeekOfFromElement(root) {
+    if (!root) return null;
+
+    const direct = parseWeekOfLabel(root.textContent || '');
+    if (direct) return direct;
+
+    for (const el of root.querySelectorAll('*')) {
+      const parsed = parseWeekOfLabel(el.textContent || '');
+      if (parsed) return parsed;
+    }
+
+    return null;
+  }
+
+  function parseWeekOfFromOpenOutcome() {
+    const fromOutcomesList = extractWeekOfFromElement(
+      document.querySelector('#outcomes [data-state="open"]')
+    );
+    if (fromOutcomesList) return fromOutcomesList;
+
+    // Newer DOM may not expose #outcomes[data-state="open"]; selected outcome
+    // label still exists inside trade widget.
+    const fromTradeWidget = extractWeekOfFromElement(
+      document.querySelector('#trade-widget')
+    );
+    if (fromTradeWidget) return fromTradeWidget;
+
+    return null;
+  }
+
+  function getWeekOutcomeEndDate(startDateIso) {
+    const parsed = parseWeekOfFromOpenOutcome();
+    if (!parsed) return null;
+
+    const year = parseStartYear(startDateIso) || getKyivCurrentYear();
+    if (!Number.isInteger(year)) return null;
+
+    // Label means Monday date; resolution window ends Sunday 23:59:59 (Kyiv).
+    const mondayUtc = Date.UTC(year, parsed.monthIndex, parsed.day, 0, 0, 0);
+    const sundayUtc = new Date(mondayUtc + (6 * 86400000));
+
+    return makeDateInTimeZone(
+      sundayUtc.getUTCFullYear(),
+      sundayUtc.getUTCMonth(),
+      sundayUtc.getUTCDate(),
+      23,
+      59,
+      59,
+      KYIV_TZ
+    );
+  }
+
+  function getSmartDate() {
+    const eventData = getEventJsonLd();
+
+    if (eventData?.endDate) {
+      const endDate = new Date(eventData.endDate);
+      if (isFinite(endDate.getTime())) return endDate;
+    }
+
+    const weekEndDate = getWeekOutcomeEndDate(eventData?.startDate || null);
+    if (weekEndDate && isFinite(weekEndDate.getTime())) return weekEndDate;
+
     return null;
   }
 
