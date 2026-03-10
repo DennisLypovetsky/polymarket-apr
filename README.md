@@ -1,26 +1,26 @@
-# Polymarket APR (Chrome Extension)
+# Polymarket APR
 
-## Current Structure
+Chrome extension that adds a native-style APR (Annual Percentage Rate) block to the Polymarket trade widget.
 
-- `polymarket-apr/` - single working folder for the extension source
-- `pictures/` - design/media assets
+## Install
+
+The latest Chrome version is available in the Chrome Web Store:
+
+- https://chromewebstore.google.com/detail/polymarket-apr/dainflhaaolcjggcopmjhpaodnleicib
+
+## Local Development
+
+1. Open `chrome://extensions`.
+2. Enable Developer mode.
+3. Click "Load unpacked".
+4. Select the `polymarket-apr/` folder from this repository.
+
+## Repository Structure
+
+- `polymarket-apr/` - extension source used for development and testing
 - `releases/` - packaged release archives (`.zip`)
+- `pictures/` - icons, screenshots, and promo assets
 
-## Branching Model
+## Development Workflow
 
-- `main` - stable release-ready code
-- `codex/vX.Y-fix` - feature/fix branches for next version work
-
-## Release Flow
-
-1. Create/update feature branch from `main`.
-2. Make changes in `polymarket-apr/`.
-3. Update `polymarket-apr/manifest.json` version.
-4. Test in Chrome as unpacked extension.
-5. Build zip to `releases/polymarket-apr-vX.Y.zip`.
-6. Merge into `main`.
-7. Create tag `vX.Y` on the release commit.
-
-## Chrome Load Path
-
-Use `polymarket-apr/` as the unpacked extension folder.
+See `CONTRIBUTING.md` for branching, versioning, and release flow.
