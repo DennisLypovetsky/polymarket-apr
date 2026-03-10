@@ -3,23 +3,34 @@
 ## Branching Model
 
 - `main` - stable, release-ready branch
-- `codex/vX.Y-fix` - work branch for the next fix/release cycle
+- `feature/<kebab-case>` - task-scoped branch for a single feature or fix
+- Canonical example: `feature/market-apr`
+- Always create new feature branches from the latest `main` (never from another feature branch)
+
+## Create a New Branch
+
+```bash
+git checkout main
+git pull --ff-only
+git checkout -b feature/<name>
+```
 
 ## Versioning
 
-1. Update `polymarket-apr/manifest.json` version before release.
+1. Update `polymarket-apr/manifest.json` version before release packaging.
 2. Keep one source folder: `polymarket-apr/` (no duplicate version folders).
 3. Tag releases as `vX.Y` on `main`.
 
 ## Release Flow
 
-1. Create or update a branch from `main` (example: `codex/v1.2-fix`).
+1. Create or update a feature branch from `main`.
 2. Implement and test changes in `polymarket-apr/`.
-3. Validate in Chrome via unpacked extension.
-4. Build release archive to `releases/polymarket-apr-vX.Y.zip`.
-5. Merge branch into `main`.
-6. Create Git tag `vX.Y`.
-7. Push branch, `main`, and tags to GitHub.
+3. Run APR checks from `TESTING_PRINCIPLES.md`.
+4. Validate in Chrome via unpacked extension.
+5. Build release archive to `releases/polymarket-apr-vX.Y.zip`.
+6. Merge the branch into `main`.
+7. Create Git tag `vX.Y`.
+8. Push branch, `main`, and tags to GitHub.
 
 ## Visual Development Workflow (Required)
 
