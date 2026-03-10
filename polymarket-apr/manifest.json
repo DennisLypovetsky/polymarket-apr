@@ -1,7 +1,7 @@
-{
+﻿{
     "manifest_version": 3,
     "name": "Polymarket APR",
-    "version": "1.1",
+    "version": "1.2",
     "description": "Adds a native-style APR (Annual Percentage Rate) calculator directly into the Polymarket trade widget.",
     "icons": {
         "128": "icon.png"
