@@ -19,9 +19,19 @@ The latest Chrome version is available in the Chrome Web Store:
 3. Click "Load unpacked".
 4. Select the `polymarket-apr/` folder from this repository.
 
+## Visual Dev Cycle (v1.2)
+
+Use the combined workflow for fast UI iteration and release-safe checks:
+
+- Fast mode (userscript): `dev/polymarket-apr-dev.user.js`
+- Release mode (extension): `polymarket-apr/`
+- Sync helpers: `dev/Sync-ContentToUserscript.ps1`, `dev/Sync-UserscriptToContent.ps1`
+- Full steps and acceptance checklist: `VISUAL_WORKFLOW.md`
+
 ## Repository Structure
 
 - `polymarket-apr/` - extension source used for development and testing
+- `dev/` - local userscript workflow files for fast visual iteration
 - `releases/` - packaged release archives (`.zip`)
 - `pictures/` - icons, screenshots, and promo assets
 
