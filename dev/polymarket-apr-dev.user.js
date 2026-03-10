@@ -128,35 +128,13 @@
     state.lastColorMode = 'inactive';
   }
 
-  function findInsertAnchor(widget) {
-    // Old UI used .limit-trade-info. Current UI keeps a dashed separator
-    // above the related markets list inside the trade widget.
-    const selectors = [
-      '.limit-trade-info',
-      '.border-dashed',
-    ];
-
-    for (const selector of selectors) {
-      const el = widget.querySelector(selector);
-      if (el) return el;
-    }
-
-    return null;
-  }
-
   function ensureInserted(widget) {
     if (!state.dom.container) createWidget();
 
-    const anchor = findInsertAnchor(widget);
+    const anchor = widget.querySelector('.limit-trade-info');
     if (!anchor) return false;
 
-    if (
-      state.dom.container.previousElementSibling === anchor &&
-      state.dom.container.parentElement === anchor.parentElement
-    ) {
-      return true;
-    }
-
+    if (state.dom.container.previousElementSibling === anchor) return true;
     anchor.insertAdjacentElement('afterend', state.dom.container);
     return true;
   }
