@@ -1,36 +1,40 @@
-# Polymarket APR (Chrome Extension)
+# Polymarket APR
 
-## Структура проекта
+Chrome extension that adds a native-style APR (Annual Percentage Rate) block to the Polymarket trade widget.
 
-- `polymarket-apr/` - исходный код расширения
-- `pictures/` - медиа-материалы и ассеты
-- `releases/` - архивы релизов (`.zip`)
+## Install
 
-## Модель ветвления
+The latest Chrome version is available in the Chrome Web Store:
 
-- `main` - стабильная ветка для релизов
-- `feature/<kebab-case>` - рабочие ветки под отдельные фичи/фиксы
-- Каноничный пример: `feature/market-apr`
-- Новые feature-ветки создаются только от актуального `main` (не от других feature-веток)
+- https://chromewebstore.google.com/detail/polymarket-apr/dainflhaaolcjggcopmjhpaodnleicib
 
-## Создание новой ветки
+## Preview
 
-```bash
-git checkout main
-git pull --ff-only
-git checkout -b feature/<name>
-```
+<img src="pictures/screenshots/Screenshot.png" alt="Polymarket APR extension preview" width="960" />
 
-## Релизный процесс
+## Local Development
 
-1. Создать/обновить feature-ветку от `main`.
-2. Внести изменения в `polymarket-apr/`.
-3. Прогнать проверки по [TESTING_PRINCIPLES.md](TESTING_PRINCIPLES.md).
-4. При релизной упаковке обновить версию в `polymarket-apr/manifest.json`.
-5. Собрать архив в `releases/polymarket-apr-vX.Y.zip`.
-6. Смержить изменения в `main`.
-7. Создать тег `vX.Y` на релизном коммите.
+1. Open `chrome://extensions`.
+2. Enable Developer mode.
+3. Click "Load unpacked".
+4. Select the `polymarket-apr/` folder from this repository.
 
-## Загрузка в Chrome
+## Visual Dev Cycle (v1.2)
 
-Использовать папку `polymarket-apr/` как unpacked-расширение.
+Use the combined workflow for fast UI iteration and release-safe checks:
+
+- Fast mode (userscript): `dev/polymarket-apr-dev.user.js`
+- Release mode (extension): `polymarket-apr/`
+- Sync helpers: `dev/Sync-ContentToUserscript.ps1`, `dev/Sync-UserscriptToContent.ps1`
+- Full steps and acceptance checklist: `VISUAL_WORKFLOW.md`
+
+## Repository Structure
+
+- `polymarket-apr/` - extension source used for development and testing
+- `dev/` - local userscript workflow files for fast visual iteration
+- `releases/` - packaged release archives (`.zip`)
+- `pictures/` - icons, screenshots, and promo assets
+
+## Development Workflow
+
+See `CONTRIBUTING.md` for branching, versioning, and release flow.

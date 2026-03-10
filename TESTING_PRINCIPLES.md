@@ -1,65 +1,65 @@
-# Принципы Проверок APR
+# APR Testing Principles
 
-## Цель проверок
+## Goal
 
-- Подтверждать, что APR корректно отображается и обновляется в `Limit` и `Market`.
-- Предотвращать регрессии позиции APR, логики вычислений и поведения UI.
-- Фиксировать единый и повторяемый порядок smoke/regression проверок для всех изменений в `content.js`.
+- Verify APR renders and updates correctly in both `Limit` and `Market`.
+- Prevent regressions in APR placement, calculation logic, and UI behavior.
+- Keep a consistent smoke/regression process for all `content.js` changes.
 
-## Обязательная матрица сценариев
+## Required Scenario Matrix
 
-| Сценарий | Что проверяем | Ожидаемый результат |
+| Scenario | What to verify | Expected result |
 | --- | --- | --- |
-| `Limit + BUY` | Позиция APR | APR вставлен сразу после `.limit-trade-info` |
-| `Market + BUY` | Позиция APR | APR вставлен перед `.flex.flex-col.gap-4 > .flex.flex-1` (CTA-блок `Trade`) |
-| `BUY -> SELL` в обоих режимах | Видимость APR | На `SELL` APR скрыт |
-| `Amount = пусто` в `Market` | Расчёт APR | APR считается от выбранного outcome, не требует введённой суммы |
-| `Amount = +$1` в `Market` | Стабильность расчёта | При той же выбранной outcome-кнопке APR не меняется только из-за amount |
-| Single market (`1` исход) | Общая работоспособность | APR корректно отображается/скрывается/обновляется |
-| Multi market (`2+` исходов) | Общая работоспособность | APR корректно отображается/скрывается/обновляется |
-| End date в текущем году | Время до резолва | Тайм-тег (`D`/`h`) и tooltip корректны |
-| End date в следующем году | Долгий горизонт | APR и тайм-тег корректны, без переполнений/некорректных форматов |
-| Market anchor не найден | Fail-safe поведение | APR не вставляется в неверное место, UI не ломается |
-| Переключение `Limit <-> Market` | Реинсерт и дубли | APR не дублируется, позиция корректна после каждого переключения |
+| `Limit + BUY` | APR placement | APR is inserted right after `.limit-trade-info` |
+| `Market + BUY` | APR placement | APR is inserted right before `.flex.flex-col.gap-4 > .flex.flex-1` (Trade CTA block) |
+| `BUY -> SELL` in both modes | APR visibility | APR is hidden on `SELL` |
+| `Amount = empty` in `Market` | APR calculation source | APR is calculated from selected outcome price and does not require entered amount |
+| `Amount = +$1` in `Market` | Calculation stability | APR does not change only because amount changed (when selected outcome is unchanged) |
+| Single market (`1` outcome) | General behavior | APR shows/hides/updates correctly |
+| Multi market (`2+` outcomes) | General behavior | APR shows/hides/updates correctly |
+| End date in current year | Time-to-resolve rendering | Time tag (`D`/`h`) and tooltip are correct |
+| End date in next year | Long-horizon rendering | APR and time tag remain correct without formatting overflow |
+| Market anchor missing | Fail-safe behavior | APR is not inserted into a wrong place and UI stays intact |
+| Switch `Limit <-> Market` | Reinsertion and dedupe | APR is not duplicated and re-inserts in the correct zone after each switch |
 
-## Критерии Pass/Fail
+## Pass/Fail Criteria
 
-- `PASS`: все сценарии из матрицы выполняются без визуальных дефектов и ошибок в консоли, связанных с APR-скриптом.
-- `FAIL`: любой из пунктов ниже:
-  - APR в неверной позиции.
-  - APR не скрывается на `SELL`.
-  - APR зависит от `Amount` в `Market`, когда outcome не менялся.
-  - APR дублируется.
-  - При отсутствии якоря APR вставляется в случайное место.
+- `PASS`: all scenarios above pass without APR-related console errors or visual defects.
+- `FAIL`: any of the following occurs:
+  - APR appears in the wrong place.
+  - APR is not hidden on `SELL`.
+  - APR incorrectly depends on `Amount` in `Market` when outcome is unchanged.
+  - APR is duplicated.
+  - APR is inserted in a random location when the market anchor is missing.
 
-## Порядок Smoke-Регрессии
+## Smoke Regression Order
 
-1. Открыть не-крипто рынок и включить `BUY`.
-2. Проверить `Limit` (позиция и отображение APR).
-3. Переключиться в `Market`, проверить позицию APR.
-4. Проверить `Amount`: пусто -> `+$1` (при той же outcome-кнопке).
-5. Переключить `BUY -> SELL -> BUY` и убедиться, что hide/show работает корректно.
-6. Переключить `Limit <-> Market` несколько раз и убедиться в отсутствии дублей.
-7. Повторить пункты 1-6 на:
-   - хотя бы одном single market;
-   - хотя бы одном multi market;
-   - хотя бы одном рынке с end date в текущем году;
-   - хотя бы одном рынке с end date в следующем году.
+1. Open a non-crypto market and set `BUY`.
+2. Validate `Limit` (placement and rendering).
+3. Switch to `Market` and validate placement.
+4. Validate `Amount` behavior: empty -> `+$1` (with the same selected outcome).
+5. Switch `BUY -> SELL -> BUY` and verify hide/show behavior.
+6. Switch `Limit <-> Market` multiple times and verify no duplicates.
+7. Repeat steps 1-6 on:
+   - at least one single market;
+   - at least one multi market;
+   - at least one market with end date in the current year;
+   - at least one market with end date in the next year.
 
-## Формат Репорта Багов
+## Bug Report Format
 
-Использовать единый шаблон:
+Use the following template:
 
 ```md
-### BUG: <краткое название>
+### BUG: <short-title>
 - Date: YYYY-MM-DD
 - Branch: feature/<name>
 - Market URL: <url>
 - Mode: Limit | Market
 - Side: BUY | SELL
 - Amount: empty | +$1 | custom
-- Expected: <ожидаемое поведение>
-- Actual: <фактическое поведение>
+- Expected: <expected-behavior>
+- Actual: <actual-behavior>
 - Steps to reproduce:
   1. ...
   2. ...
@@ -68,4 +68,4 @@
 - Severity: S1 | S2 | S3
 ```
 
-Минимум для фиксации бага: URL, шаги воспроизведения, expected/actual и артефакт (скриншот или видео).
+Minimum bug report fields: URL, reproduction steps, expected/actual behavior, and one artifact (screenshot or video).
