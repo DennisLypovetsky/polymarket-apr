@@ -1,3 +1,15 @@
+// ==UserScript==
+// @name         Polymarket APR Dev
+// @namespace    https://github.com/DennisLypovetsky/polymarket-apr
+// @version      1.2.0-dev
+// @description  Fast visual iteration script for Polymarket APR
+// @match        https://polymarket.com/*
+// @grant        none
+// ==/UserScript==
+
+// NOTE:
+// Source of truth is polymarket-apr/content.js.
+// Use this file for fast visual iteration, then move accepted changes back.
 (function () {
   'use strict';
 
