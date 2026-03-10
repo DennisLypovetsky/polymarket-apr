@@ -1,26 +1,36 @@
 # Polymarket APR (Chrome Extension)
 
-## Current Structure
+## Структура проекта
 
-- `polymarket-apr/` - single working folder for the extension source
-- `pictures/` - design/media assets
-- `releases/` - packaged release archives (`.zip`)
+- `polymarket-apr/` - исходный код расширения
+- `pictures/` - медиа-материалы и ассеты
+- `releases/` - архивы релизов (`.zip`)
 
-## Branching Model
+## Модель ветвления
 
-- `main` - stable release-ready code
-- `codex/vX.Y-fix` - feature/fix branches for next version work
+- `main` - стабильная ветка для релизов
+- `feature/<kebab-case>` - рабочие ветки под отдельные фичи/фиксы
+- Каноничный пример: `feature/market-apr`
+- Новые feature-ветки создаются только от актуального `main` (не от других feature-веток)
 
-## Release Flow
+## Создание новой ветки
 
-1. Create/update feature branch from `main`.
-2. Make changes in `polymarket-apr/`.
-3. Update `polymarket-apr/manifest.json` version.
-4. Test in Chrome as unpacked extension.
-5. Build zip to `releases/polymarket-apr-vX.Y.zip`.
-6. Merge into `main`.
-7. Create tag `vX.Y` on the release commit.
+```bash
+git checkout main
+git pull --ff-only
+git checkout -b feature/<name>
+```
 
-## Chrome Load Path
+## Релизный процесс
 
-Use `polymarket-apr/` as the unpacked extension folder.
+1. Создать/обновить feature-ветку от `main`.
+2. Внести изменения в `polymarket-apr/`.
+3. Прогнать проверки по [TESTING_PRINCIPLES.md](TESTING_PRINCIPLES.md).
+4. При релизной упаковке обновить версию в `polymarket-apr/manifest.json`.
+5. Собрать архив в `releases/polymarket-apr-vX.Y.zip`.
+6. Смержить изменения в `main`.
+7. Создать тег `vX.Y` на релизном коммите.
+
+## Загрузка в Chrome
+
+Использовать папку `polymarket-apr/` как unpacked-расширение.
