@@ -32,7 +32,7 @@ Use the combined workflow for fast UI iteration and release-safe checks:
 
 - `polymarket-apr/` - extension source used for development and testing
 - `dev/` - local userscript workflow files for fast visual iteration
-- `releases/` - packaged release archives (`.zip`)
+- `releases/` - release metadata/docs (ZIP binaries are published as GitHub Release assets)
 - `pictures/` - icons, screenshots, and promo assets
 
 ## Development Workflow
