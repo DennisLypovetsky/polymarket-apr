@@ -499,17 +499,23 @@
   }
 
   function getActiveOutcomeDateParts() {
-    const fromOutcomesList = extractOutcomeDateParts(
-      document.querySelector('#outcomes [data-state="open"]')
-    );
-    if (fromOutcomesList) return fromOutcomesList;
+    const outcomesOpenRoot = document.querySelector('#outcomes [data-state="open"]');
+    const tradeWidgetRoot = document.querySelector('#trade-widget');
 
-    // Newer DOM may not expose #outcomes[data-state="open"]; selected outcome
-    // label may still exist in trade widget as a short standalone date label.
-    const fromTradeWidget = extractOutcomeDatePartsExact(
-      document.querySelector('#trade-widget')
-    );
-    if (fromTradeWidget) return fromTradeWidget;
+    // Prefer the currently selected short label in trade widget.
+    const fromTradeWidgetExact = extractOutcomeDatePartsExact(tradeWidgetRoot);
+    if (fromTradeWidgetExact) return fromTradeWidgetExact;
+
+    // If outcomes list is available, prefer exact label matching there.
+    const fromOutcomesExact = extractOutcomeDatePartsExact(outcomesOpenRoot);
+    if (fromOutcomesExact) return fromOutcomesExact;
+
+    // Fall back to loose parsing only after exact strategies fail.
+    const fromTradeWidgetLoose = extractOutcomeDateParts(tradeWidgetRoot);
+    if (fromTradeWidgetLoose) return fromTradeWidgetLoose;
+
+    const fromOutcomesLoose = extractOutcomeDateParts(outcomesOpenRoot);
+    if (fromOutcomesLoose) return fromOutcomesLoose;
 
     return null;
   }
