@@ -380,6 +380,22 @@
     return null;
   }
 
+  function extractOutcomeDatePartsExact(root) {
+    if (!root) return null;
+
+    const nodes = [root, ...root.querySelectorAll('*')];
+
+    for (const node of nodes) {
+      const text = normalizeSpaces(node.textContent || '');
+      if (!text || text.length > 64) continue;
+
+      const parsed = parseOutcomeLabelExact(text);
+      if (parsed) return parsed;
+    }
+
+    return null;
+  }
+
   function getActiveOutcomeDateParts() {
     const fromOutcomesList = extractOutcomeDateParts(
       document.querySelector('#outcomes [data-state="open"]')
@@ -387,8 +403,8 @@
     if (fromOutcomesList) return fromOutcomesList;
 
     // Newer DOM may not expose #outcomes[data-state="open"]; selected outcome
-    // label still exists inside trade widget.
-    const fromTradeWidget = extractOutcomeDateParts(
+    // label may still exist in trade widget as a short standalone date label.
+    const fromTradeWidget = extractOutcomeDatePartsExact(
       document.querySelector('#trade-widget')
     );
     if (fromTradeWidget) return fromTradeWidget;
@@ -455,13 +471,13 @@
   function getSmartDate() {
     const eventData = getEventJsonLd();
 
+    const fallbackDate = getFallbackDateFromRules(eventData?.startDate || null);
+    if (isValidDate(fallbackDate)) return fallbackDate;
+
     if (eventData?.endDate) {
       const endDate = new Date(eventData.endDate);
       if (isValidDate(endDate)) return endDate;
     }
-
-    const fallbackDate = getFallbackDateFromRules(eventData?.startDate || null);
-    if (isValidDate(fallbackDate)) return fallbackDate;
 
     return null;
   }
