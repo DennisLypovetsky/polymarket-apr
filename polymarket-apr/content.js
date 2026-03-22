@@ -241,7 +241,7 @@
   const WEEK_OF_FREE_RE = /\bWeek of\s+([A-Za-z]+)\s+(\d{1,2})(?:,\s*(\d{4}))?\b/i;
   const DATE_FREE_RE = /\b(?:by\s+)?([A-Za-z]+)\s+(\d{1,2})(?:,\s*(\d{4}))?\b/i;
   const IANA_TZ_RE = /\b([A-Za-z_]+\/[A-Za-z_]+(?:\/[A-Za-z_]+)?)\b/g;
-  const RULES_START_RE = /^This market will resolve/i;
+  const RULES_START_RE = /This market will resolve/i;
   const EXPLICIT_TIME_RE = /\b(\d{1,2})(?::(\d{2}))?\s*(AM|PM)\b/i;
 
   const MONTH_INDEX = {
@@ -263,6 +263,10 @@
     { re: /\bEastern European Time\b/i, timeZone: 'Europe/Kyiv' },
     { re: /\bEEST\b/i, timeZone: 'Europe/Kyiv' },
     { re: /\bEET\b/i, timeZone: 'Europe/Kyiv' },
+    { re: /\bPacific Time\b/i, timeZone: 'America/Los_Angeles' },
+    { re: /\bPDT\b/i, timeZone: 'America/Los_Angeles' },
+    { re: /\bPST\b/i, timeZone: 'America/Los_Angeles' },
+    { re: /\bPT\b/i, timeZone: 'America/Los_Angeles' },
     { re: /\bEastern Time\b/i, timeZone: 'America/New_York' },
     { re: /\bEDT\b/i, timeZone: 'America/New_York' },
     { re: /\bEST\b/i, timeZone: 'America/New_York' },
@@ -378,6 +382,15 @@
   }
 
   function getRulesText() {
+    const activeRulesPanel = document.querySelector('[role="tabpanel"]');
+    if (activeRulesPanel) {
+      const panelText = normalizeSpaces(activeRulesPanel.textContent || '');
+      if (panelText.length >= 80 && RULES_START_RE.test(panelText)) {
+        const trimmedPanel = normalizeSpaces(panelText.split(/Market Opened:/i)[0] || panelText);
+        if (trimmedPanel) return trimmedPanel;
+      }
+    }
+
     const scope = document.querySelector('main') || document.body;
     if (!scope) return null;
 
@@ -385,6 +398,7 @@
     for (const el of scope.querySelectorAll('p, div, span')) {
       const text = normalizeSpaces(el.textContent || '');
       if (text.length < 80) continue;
+      if (text.length > 4000) continue;
       if (!RULES_START_RE.test(text)) continue;
       candidates.push(text);
     }
