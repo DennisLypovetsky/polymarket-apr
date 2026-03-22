@@ -241,7 +241,7 @@
   const WEEK_OF_FREE_RE = /\bWeek of\s+([A-Za-z]+)\s+(\d{1,2})(?:,\s*(\d{4}))?\b/i;
   const DATE_FREE_RE = /\b(?:by\s+)?([A-Za-z]+)\s+(\d{1,2})(?:,\s*(\d{4}))?\b/i;
   const IANA_TZ_RE = /\b([A-Za-z_]+\/[A-Za-z_]+(?:\/[A-Za-z_]+)?)\b/g;
-  const RULES_START_RE = /^This market will resolve/i;
+  const RULES_START_RE = /This market will resolve/i;
   const EXPLICIT_TIME_RE = /\b(\d{1,2})(?::(\d{2}))?\s*(AM|PM)\b/i;
 
   const MONTH_INDEX = {
@@ -263,6 +263,10 @@
     { re: /\bEastern European Time\b/i, timeZone: 'Europe/Kyiv' },
     { re: /\bEEST\b/i, timeZone: 'Europe/Kyiv' },
     { re: /\bEET\b/i, timeZone: 'Europe/Kyiv' },
+    { re: /\bPacific Time\b/i, timeZone: 'America/Los_Angeles' },
+    { re: /\bPDT\b/i, timeZone: 'America/Los_Angeles' },
+    { re: /\bPST\b/i, timeZone: 'America/Los_Angeles' },
+    { re: /\bPT\b/i, timeZone: 'America/Los_Angeles' },
     { re: /\bEastern Time\b/i, timeZone: 'America/New_York' },
     { re: /\bEDT\b/i, timeZone: 'America/New_York' },
     { re: /\bEST\b/i, timeZone: 'America/New_York' },
@@ -378,6 +382,15 @@
   }
 
   function getRulesText() {
+    const activeRulesPanel = document.querySelector('[role="tabpanel"]');
+    if (activeRulesPanel) {
+      const panelText = normalizeSpaces(activeRulesPanel.textContent || '');
+      if (panelText.length >= 80 && RULES_START_RE.test(panelText)) {
+        const trimmedPanel = normalizeSpaces(panelText.split(/Market Opened:/i)[0] || panelText);
+        if (trimmedPanel) return trimmedPanel;
+      }
+    }
+
     const scope = document.querySelector('main') || document.body;
     if (!scope) return null;
 
@@ -385,6 +398,7 @@
     for (const el of scope.querySelectorAll('p, div, span')) {
       const text = normalizeSpaces(el.textContent || '');
       if (text.length < 80) continue;
+      if (text.length > 4000) continue;
       if (!RULES_START_RE.test(text)) continue;
       candidates.push(text);
     }
@@ -499,17 +513,23 @@
   }
 
   function getActiveOutcomeDateParts() {
-    const fromOutcomesList = extractOutcomeDateParts(
-      document.querySelector('#outcomes [data-state="open"]')
-    );
-    if (fromOutcomesList) return fromOutcomesList;
+    const outcomesOpenRoot = document.querySelector('#outcomes [data-state="open"]');
+    const tradeWidgetRoot = document.querySelector('#trade-widget');
 
-    // Newer DOM may not expose #outcomes[data-state="open"]; selected outcome
-    // label may still exist in trade widget as a short standalone date label.
-    const fromTradeWidget = extractOutcomeDatePartsExact(
-      document.querySelector('#trade-widget')
-    );
-    if (fromTradeWidget) return fromTradeWidget;
+    // Prefer the currently selected short label in trade widget.
+    const fromTradeWidgetExact = extractOutcomeDatePartsExact(tradeWidgetRoot);
+    if (fromTradeWidgetExact) return fromTradeWidgetExact;
+
+    // If outcomes list is available, prefer exact label matching there.
+    const fromOutcomesExact = extractOutcomeDatePartsExact(outcomesOpenRoot);
+    if (fromOutcomesExact) return fromOutcomesExact;
+
+    // Fall back to loose parsing only after exact strategies fail.
+    const fromTradeWidgetLoose = extractOutcomeDateParts(tradeWidgetRoot);
+    if (fromTradeWidgetLoose) return fromTradeWidgetLoose;
+
+    const fromOutcomesLoose = extractOutcomeDateParts(outcomesOpenRoot);
+    if (fromOutcomesLoose) return fromOutcomesLoose;
 
     return null;
   }
