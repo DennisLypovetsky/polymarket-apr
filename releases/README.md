@@ -1,6 +1,6 @@
 # Releases Folder Policy
 
-This folder is for release metadata and lightweight documentation only.
+This folder is for release metadata, lightweight documentation, and one local upload artifact.
 
 ## What stays in git
 
@@ -10,7 +10,12 @@ This folder is for release metadata and lightweight documentation only.
 
 - Versioned ZIP binaries such as `polymarket-apr-vX.Y.zip`.
 
-ZIP files are built locally for publishing and uploaded to GitHub Releases as assets.
+ZIP files are built locally for publishing and uploaded to GitHub Releases as assets, but they are not committed.
+
+## Local retention rule
+
+- Keep only one local ZIP in `releases/`: the current release artifact.
+- Before creating a new release ZIP, delete the previous ZIP from `releases/`.
 
 ## Naming convention
 
@@ -18,7 +23,7 @@ ZIP files are built locally for publishing and uploaded to GitHub Releases as as
 
 ## Publish flow (summary)
 
-1. Build ZIP locally from `polymarket-apr/`.
-2. Create/publish GitHub Release for tag `vX.Y`.
-3. Upload ZIP as a release asset.
-4. Remove local ZIP after publishing.
+1. Delete previous ZIP from `releases/` (if present).
+2. Build new ZIP locally from `polymarket-apr/`.
+3. Create/publish GitHub Release for tag `vX.Y`.
+4. Upload ZIP as a release asset.

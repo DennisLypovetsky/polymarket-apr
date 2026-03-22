@@ -27,10 +27,12 @@ git checkout -b feature/<name>
 2. Implement and test changes in `polymarket-apr/`.
 3. Run APR checks from [TESTING_PRINCIPLES.md](TESTING_PRINCIPLES.md).
 4. Validate in Chrome via unpacked extension.
-5. Build local release archive `releases/polymarket-apr-vX.Y.zip` and upload it as a GitHub Release asset (do not commit ZIP binaries).
-6. Merge the branch into `main`.
-7. Create Git tag `vX.Y`.
-8. Push branch, `main`, and tags to GitHub.
+5. Delete previous release ZIP from `releases/` (if present).
+6. Build local release archive `releases/polymarket-apr-vX.Y.zip`.
+7. Upload the ZIP as a GitHub Release asset (do not commit ZIP binaries).
+8. Merge the branch into `main`.
+9. Create Git tag `vX.Y`.
+10. Push branch, `main`, and tags to GitHub.
 
 ## Development Workflow (Required)
 
