@@ -68,14 +68,21 @@
   }
 
   function getOrderType(widget) {
-    if (widget.querySelector('button[value="LIMIT"][data-state="checked"]')) return 'limit';
-    if (widget.querySelector('button[value="MARKET"][data-state="checked"]')) return 'market';
-
     const sideSelectionBtn = widget.querySelector('button[aria-label="side selection"]');
-    const sideText = (sideSelectionBtn?.textContent || '').trim().toLowerCase();
+    const sideText = normalizeSpaces(sideSelectionBtn?.textContent || '').toLowerCase();
 
     if (sideText.includes('limit')) return 'limit';
     if (sideText.includes('market')) return 'market';
+
+    const hasVisibleLimitAnchor = !!pickVisibleAnchor(widget, LIMIT_ANCHOR_SELECTOR);
+    const hasVisibleMarketAnchor = !!pickVisibleAnchor(widget, MARKET_ANCHOR_SELECTOR);
+
+    if (hasVisibleLimitAnchor && !hasVisibleMarketAnchor) return 'limit';
+    if (hasVisibleMarketAnchor && !hasVisibleLimitAnchor) return 'market';
+
+    if (widget.querySelector('button[value="MARKET"][data-state="checked"]')) return 'market';
+    if (widget.querySelector('button[value="LIMIT"][data-state="checked"]')) return 'limit';
+
     return null;
   }
 
