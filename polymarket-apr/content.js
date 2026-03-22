@@ -51,13 +51,21 @@
   const LIMIT_ANCHOR_SELECTOR = '.limit-trade-info';
   const MARKET_ANCHOR_SELECTOR = '.flex.flex-col.gap-4 > .flex.flex-1';
   const CENTS_PATTERN = /(\d+(?:[.,]\d+)?)\s*\u00A2/;
+  const STABILITY_DELAY_MS = 120;
+  const MARKET_SWITCH_SETTLE_MS = 360;
 
   const state = {
     dom: { container: null, valSpan: null, timeSpan: null },
     lastAprText: null,
     lastTime: null,
     lastColorMode: null,
-    scheduled: false
+    scheduled: false,
+    settleTimerId: null,
+    marketSwitchUntil: 0,
+    lastMarketLabel: null,
+    appliedInputKey: null,
+    pendingInputKey: null,
+    pendingInputSince: 0
   };
 
   function isBuyActive(widget) {
@@ -131,6 +139,100 @@
       state.scheduled = false;
       update();
     });
+  }
+
+  function scheduleSettledUpdate(delayMs = STABILITY_DELAY_MS) {
+    if (state.settleTimerId) return;
+
+    const safeDelay = Math.max(0, Math.round(delayMs));
+    state.settleTimerId = setTimeout(() => {
+      state.settleTimerId = null;
+      scheduleUpdate();
+    }, safeDelay);
+  }
+
+  function shouldDeferRender(inputKey) {
+    if (state.appliedInputKey === null) {
+      state.appliedInputKey = inputKey;
+      state.pendingInputKey = null;
+      state.pendingInputSince = 0;
+      return false;
+    }
+
+    if (state.appliedInputKey === inputKey) {
+      state.pendingInputKey = null;
+      state.pendingInputSince = 0;
+      return false;
+    }
+
+    const now = performance.now();
+
+    if (state.pendingInputKey !== inputKey) {
+      state.pendingInputKey = inputKey;
+      state.pendingInputSince = now;
+      scheduleSettledUpdate();
+      return true;
+    }
+
+    const elapsed = now - state.pendingInputSince;
+    if (elapsed < STABILITY_DELAY_MS) {
+      scheduleSettledUpdate(STABILITY_DELAY_MS - elapsed);
+      return true;
+    }
+
+    state.appliedInputKey = inputKey;
+    state.pendingInputKey = null;
+    state.pendingInputSince = 0;
+    return false;
+  }
+
+  function readWidgetMarketLabel(widget) {
+    const primary = widget.querySelector('.font-semibold.text-heading-lg');
+    const primaryText = normalizeSpaces(primary?.textContent || '');
+    if (primaryText && parseOutcomeLabelExact(primaryText)) return primaryText;
+
+    const candidates = widget.querySelectorAll('.font-semibold, .font-medium');
+    for (const candidate of candidates) {
+      const text = normalizeSpaces(candidate.textContent || '');
+      if (!text || text.length > 64) continue;
+      if (parseOutcomeLabelExact(text)) return text;
+    }
+
+    return null;
+  }
+
+  function isExternalMarketSwitchTrigger(target) {
+    if (!target || !target.closest) return false;
+
+    const button = target.closest('button');
+    if (!button || button.closest('#trade-widget')) return false;
+
+    const text = normalizeSpaces(button.textContent || '');
+    if (!/\bbuy\b/i.test(text)) return false;
+
+    return parseCents(text) !== null;
+  }
+
+  function armMarketSwitchSettle() {
+    const nextUntil = performance.now() + MARKET_SWITCH_SETTLE_MS;
+    state.marketSwitchUntil = Math.max(state.marketSwitchUntil, nextUntil);
+    scheduleSettledUpdate(MARKET_SWITCH_SETTLE_MS);
+  }
+
+  function shouldWaitForMarketSwitchSettle(orderType) {
+    if (orderType === 'limit') {
+      state.marketSwitchUntil = 0;
+      return false;
+    }
+
+    const remaining = state.marketSwitchUntil - performance.now();
+    if (remaining <= 0) {
+      state.marketSwitchUntil = 0;
+      return false;
+    }
+
+    scheduleSettledUpdate(remaining);
+    return true;
   }
 
   // ---------- DATE ----------
@@ -593,11 +695,27 @@
       return;
     }
 
+    const orderType = getOrderType(widget);
+    if (orderType === 'market') {
+      const marketLabel = readWidgetMarketLabel(widget);
+      if (marketLabel && state.lastMarketLabel && state.lastMarketLabel !== marketLabel) {
+        armMarketSwitchSettle();
+      }
+      state.lastMarketLabel = marketLabel || state.lastMarketLabel;
+    } else {
+      state.lastMarketLabel = null;
+    }
+
+    if (shouldWaitForMarketSwitchSettle(orderType)) return;
+
     if (!ensureInserted(widget)) return;
     state.dom.container.style.display = 'flex';
 
     const price = readPrice(widget);
     const endDate = getSmartDate();
+    const inputKey = `${orderType || 'unknown'}|${price}|${endDate ? endDate.getTime() : 'na'}`;
+
+    if (shouldDeferRender(inputKey)) return;
 
     let aprText = '--';
     let timeText = '';
@@ -658,7 +776,13 @@
     if (event.target.closest('#trade-widget')) scheduleUpdate();
   };
 
+  const onExternalMarketSwitchClick = (event) => {
+    if (!isExternalMarketSwitchTrigger(event.target)) return;
+    armMarketSwitchSettle();
+  };
+
   document.addEventListener('click', onAnyWidgetInteraction, true);
+  document.addEventListener('click', onExternalMarketSwitchClick, true);
   document.addEventListener('input', onAnyWidgetInteraction, true);
   document.addEventListener('change', onAnyWidgetInteraction, true);
 
@@ -671,9 +795,11 @@
       // Ignore disconnect errors.
     }
     document.removeEventListener('click', onAnyWidgetInteraction, true);
+    document.removeEventListener('click', onExternalMarketSwitchClick, true);
     document.removeEventListener('input', onAnyWidgetInteraction, true);
     document.removeEventListener('change', onAnyWidgetInteraction, true);
     clearInterval(intervalId);
+    if (state.settleTimerId) clearTimeout(state.settleTimerId);
     if (state.dom.container && state.dom.container.isConnected) state.dom.container.remove();
   };
 
