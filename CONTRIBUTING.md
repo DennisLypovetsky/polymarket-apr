@@ -25,7 +25,7 @@ git checkout -b feature/<name>
 
 1. Create or update a feature branch from `main`.
 2. Implement and test changes in `polymarket-apr/`.
-3. Run APR checks from `TESTING_PRINCIPLES.md`.
+3. Run APR checks from [TESTING_PRINCIPLES.md](TESTING_PRINCIPLES.md).
 4. Validate in Chrome via unpacked extension.
 5. Build local release archive `releases/polymarket-apr-vX.Y.zip` and upload it as a GitHub Release asset (do not commit ZIP binaries).
 6. Merge the branch into `main`.
@@ -34,7 +34,7 @@ git checkout -b feature/<name>
 
 ## Development Workflow (Required)
 
-- Follow `VISUAL_WORKFLOW.md` for the combined fast/release cycle.
+- Follow [VISUAL_WORKFLOW.md](VISUAL_WORKFLOW.md) for the combined fast/release cycle.
 - Fast mode (userscript): `dev/polymarket-apr-dev.user.js`.
 - Release mode (extension): `polymarket-apr/`.
 - Sync helpers: `dev/Sync-ContentToUserscript.ps1`, `dev/Sync-UserscriptToContent.ps1`.

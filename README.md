@@ -27,4 +27,4 @@ https://chromewebstore.google.com/detail/polymarket-apr/dainflhaaolcjggcopmjhpao
 
 ## Development Workflow
 
-See `CONTRIBUTING.md` for the full development workflow (including visual dev cycle and pre-commit visual gate), plus branching, versioning, and release flow.
+See [CONTRIBUTING.md](CONTRIBUTING.md) for the full development workflow (including visual dev cycle and pre-commit visual gate), plus branching, versioning, and release flow.
