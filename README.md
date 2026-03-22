@@ -28,4 +28,4 @@ The latest Chrome version is available in the Chrome Web Store:
 
 ## Development Workflow
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for the full development workflow (including visual dev cycle and pre-commit visual gate), plus branching, versioning, and release flow.
+See [CONTRIBUTING.md](CONTRIBUTING.md) for the full development, branching, versioning, and release flow.
