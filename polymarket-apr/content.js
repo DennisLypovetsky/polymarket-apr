@@ -52,6 +52,7 @@
   const MARKET_ANCHOR_SELECTOR = '.flex.flex-col.gap-4 > .flex.flex-1';
   const CENTS_PATTERN = /(\d+(?:[.,]\d+)?)\s*\u00A2/;
   const STABILITY_DELAY_MS = 120;
+  const MARKET_SWITCH_SETTLE_MS = 360;
 
   const state = {
     dom: { container: null, valSpan: null, timeSpan: null },
@@ -60,6 +61,8 @@
     lastColorMode: null,
     scheduled: false,
     settleTimerId: null,
+    marketSwitchUntil: 0,
+    lastMarketLabel: null,
     appliedInputKey: null,
     pendingInputKey: null,
     pendingInputSince: 0
@@ -181,6 +184,55 @@
     state.pendingInputKey = null;
     state.pendingInputSince = 0;
     return false;
+  }
+
+  function readWidgetMarketLabel(widget) {
+    const primary = widget.querySelector('.font-semibold.text-heading-lg');
+    const primaryText = normalizeSpaces(primary?.textContent || '');
+    if (primaryText && parseOutcomeLabelExact(primaryText)) return primaryText;
+
+    const candidates = widget.querySelectorAll('.font-semibold, .font-medium');
+    for (const candidate of candidates) {
+      const text = normalizeSpaces(candidate.textContent || '');
+      if (!text || text.length > 64) continue;
+      if (parseOutcomeLabelExact(text)) return text;
+    }
+
+    return null;
+  }
+
+  function isExternalMarketSwitchTrigger(target) {
+    if (!target || !target.closest) return false;
+
+    const button = target.closest('button');
+    if (!button || button.closest('#trade-widget')) return false;
+
+    const text = normalizeSpaces(button.textContent || '');
+    if (!/\bbuy\b/i.test(text)) return false;
+
+    return parseCents(text) !== null;
+  }
+
+  function armMarketSwitchSettle() {
+    const nextUntil = performance.now() + MARKET_SWITCH_SETTLE_MS;
+    state.marketSwitchUntil = Math.max(state.marketSwitchUntil, nextUntil);
+    scheduleSettledUpdate(MARKET_SWITCH_SETTLE_MS);
+  }
+
+  function shouldWaitForMarketSwitchSettle(orderType) {
+    if (orderType === 'limit') {
+      state.marketSwitchUntil = 0;
+      return false;
+    }
+
+    const remaining = state.marketSwitchUntil - performance.now();
+    if (remaining <= 0) {
+      state.marketSwitchUntil = 0;
+      return false;
+    }
+
+    scheduleSettledUpdate(remaining);
+    return true;
   }
 
   // ---------- DATE ----------
@@ -643,12 +695,25 @@
       return;
     }
 
+    const orderType = getOrderType(widget);
+    if (orderType === 'market') {
+      const marketLabel = readWidgetMarketLabel(widget);
+      if (marketLabel && state.lastMarketLabel && state.lastMarketLabel !== marketLabel) {
+        armMarketSwitchSettle();
+      }
+      state.lastMarketLabel = marketLabel || state.lastMarketLabel;
+    } else {
+      state.lastMarketLabel = null;
+    }
+
+    if (shouldWaitForMarketSwitchSettle(orderType)) return;
+
     if (!ensureInserted(widget)) return;
     state.dom.container.style.display = 'flex';
 
     const price = readPrice(widget);
     const endDate = getSmartDate();
-    const inputKey = `${getOrderType(widget) || 'unknown'}|${price}|${endDate ? endDate.getTime() : 'na'}`;
+    const inputKey = `${orderType || 'unknown'}|${price}|${endDate ? endDate.getTime() : 'na'}`;
 
     if (shouldDeferRender(inputKey)) return;
 
@@ -711,7 +776,13 @@
     if (event.target.closest('#trade-widget')) scheduleUpdate();
   };
 
+  const onExternalMarketSwitchClick = (event) => {
+    if (!isExternalMarketSwitchTrigger(event.target)) return;
+    armMarketSwitchSettle();
+  };
+
   document.addEventListener('click', onAnyWidgetInteraction, true);
+  document.addEventListener('click', onExternalMarketSwitchClick, true);
   document.addEventListener('input', onAnyWidgetInteraction, true);
   document.addEventListener('change', onAnyWidgetInteraction, true);
 
@@ -724,6 +795,7 @@
       // Ignore disconnect errors.
     }
     document.removeEventListener('click', onAnyWidgetInteraction, true);
+    document.removeEventListener('click', onExternalMarketSwitchClick, true);
     document.removeEventListener('input', onAnyWidgetInteraction, true);
     document.removeEventListener('change', onAnyWidgetInteraction, true);
     clearInterval(intervalId);
