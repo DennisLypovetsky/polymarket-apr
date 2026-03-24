@@ -49,10 +49,15 @@
   const CLASS_INACTIVE = 'text-neutral-500 text-[20px] leading-6 font-medium';
 
   const LIMIT_ANCHOR_SELECTOR = '.limit-trade-info';
-  const MARKET_ANCHOR_SELECTOR = '.flex.flex-col.gap-4 > .flex.flex-1';
+  const MARKET_ANCHOR_SELECTORS = [
+    '.flex.flex-col.gap-4 > .flex.flex-1',
+    '.flex.flex-col.gap-4 > button',
+    '.flex.flex-col.gap-4'
+  ];
   const CENTS_PATTERN = /(\d+(?:[.,]\d+)?)\s*\u00A2/;
   const STABILITY_DELAY_MS = 120;
   const MARKET_SWITCH_SETTLE_MS = 360;
+  const SIDE_SWITCH_SETTLE_MS = 260;
 
   const state = {
     dom: { container: null, valSpan: null, timeSpan: null },
@@ -62,10 +67,13 @@
     scheduled: false,
     settleTimerId: null,
     marketSwitchUntil: 0,
+    sideSwitchUntil: 0,
     lastMarketLabel: null,
+    lastBuyActive: null,
     appliedInputKey: null,
     pendingInputKey: null,
-    pendingInputSince: 0
+    pendingInputSince: 0,
+    lastOutcomePrice: null
   };
 
   function isBuyActive(widget) {
@@ -77,19 +85,21 @@
 
   function getOrderType(widget) {
     const sideSelectionBtn = widget.querySelector('button[aria-label="side selection"]');
+    const sideLabel = normalizeSpaces(sideSelectionBtn?.querySelector('p,span')?.textContent || '').toLowerCase();
     const sideText = normalizeSpaces(sideSelectionBtn?.textContent || '').toLowerCase();
 
-    if (sideText.includes('limit')) return 'limit';
-    if (sideText.includes('market')) return 'market';
-
-    const hasVisibleLimitAnchor = !!pickVisibleAnchor(widget, LIMIT_ANCHOR_SELECTOR);
-    const hasVisibleMarketAnchor = !!pickVisibleAnchor(widget, MARKET_ANCHOR_SELECTOR);
-
-    if (hasVisibleLimitAnchor && !hasVisibleMarketAnchor) return 'limit';
-    if (hasVisibleMarketAnchor && !hasVisibleLimitAnchor) return 'market';
+    if (sideLabel === 'limit' || sideLabel === 'market') return sideLabel;
+    if (/\blimit\b/i.test(sideText) && !/\bmarket\b/i.test(sideText)) return 'limit';
+    if (/\bmarket\b/i.test(sideText) && !/\blimit\b/i.test(sideText)) return 'market';
 
     if (widget.querySelector('button[value="MARKET"][data-state="checked"]')) return 'market';
     if (widget.querySelector('button[value="LIMIT"][data-state="checked"]')) return 'limit';
+
+    const hasVisibleLimitAnchor = !!pickVisibleAnchor(widget, LIMIT_ANCHOR_SELECTOR);
+    const hasVisibleMarketAnchor = !!pickVisibleAnchor(widget, MARKET_ANCHOR_SELECTORS);
+
+    if (hasVisibleLimitAnchor && !hasVisibleMarketAnchor) return 'limit';
+    if (hasVisibleMarketAnchor && !hasVisibleLimitAnchor) return 'market';
 
     return null;
   }
@@ -98,11 +108,18 @@
     return !!(el && (el.offsetParent || el.getClientRects().length));
   }
 
-  function pickVisibleAnchor(widget, selector) {
-    const anchors = widget.querySelectorAll(selector);
-    for (const anchor of anchors) {
-      if (isElementVisible(anchor)) return anchor;
+  function pickVisibleAnchor(widget, selectorOrSelectors) {
+    const selectors = Array.isArray(selectorOrSelectors)
+      ? selectorOrSelectors
+      : [selectorOrSelectors];
+
+    for (const selector of selectors) {
+      const anchors = widget.querySelectorAll(selector);
+      for (const anchor of anchors) {
+        if (isElementVisible(anchor)) return anchor;
+      }
     }
+
     return null;
   }
 
@@ -219,6 +236,12 @@
     scheduleSettledUpdate(MARKET_SWITCH_SETTLE_MS);
   }
 
+  function armSideSwitchSettle() {
+    const nextUntil = performance.now() + SIDE_SWITCH_SETTLE_MS;
+    state.sideSwitchUntil = Math.max(state.sideSwitchUntil, nextUntil);
+    scheduleSettledUpdate(SIDE_SWITCH_SETTLE_MS);
+  }
+
   function shouldWaitForMarketSwitchSettle(orderType) {
     if (orderType === 'limit') {
       state.marketSwitchUntil = 0;
@@ -235,11 +258,27 @@
     return true;
   }
 
+  function shouldWaitForSideSwitchSettle(isBuy) {
+    if (!isBuy) {
+      state.sideSwitchUntil = 0;
+      return false;
+    }
+
+    const remaining = state.sideSwitchUntil - performance.now();
+    if (remaining <= 0) {
+      state.sideSwitchUntil = 0;
+      return false;
+    }
+
+    scheduleSettledUpdate(remaining);
+    return true;
+  }
+
   // ---------- DATE ----------
   const WEEK_OF_RE = /^Week of\s+([A-Za-z]+)\s+(\d{1,2})(?:,\s*(\d{4}))?$/i;
   const DATE_LABEL_RE = /^(?:by\s+)?([A-Za-z]+)\s+(\d{1,2})(?:,\s*(\d{4}))?$/i;
   const WEEK_OF_FREE_RE = /\bWeek of\s+([A-Za-z]+)\s+(\d{1,2})(?:,\s*(\d{4}))?\b/i;
-  const DATE_FREE_RE = /\b(?:by\s+)?([A-Za-z]+)\s+(\d{1,2})(?:,\s*(\d{4}))?\b/i;
+  const DATE_FREE_RE = /\bby\s+([A-Za-z]+)\s+(\d{1,2})(?:,\s*(\d{4}))?\b/i;
   const IANA_TZ_RE = /\b([A-Za-z_]+\/[A-Za-z_]+(?:\/[A-Za-z_]+)?)\b/g;
   const RULES_START_RE = /This market will resolve/i;
   const EXPLICIT_TIME_RE = /\b(\d{1,2})(?::(\d{2}))?\s*(AM|PM)\b/i;
@@ -414,34 +453,66 @@
     const rulesText = getRulesText();
     if (!rulesText) return null;
 
+    let hour = 23;
+    let minute = 59;
+    let pivotIndex = rulesText.length - 1;
+
     const explicit = rulesText.match(EXPLICIT_TIME_RE);
     if (explicit) {
       const hour12 = parseInt(explicit[1], 10);
-      const minute = explicit[2] ? parseInt(explicit[2], 10) : 0;
+      minute = explicit[2] ? parseInt(explicit[2], 10) : 0;
       const meridiem = explicit[3].toUpperCase();
 
       if (!Number.isInteger(hour12) || hour12 < 1 || hour12 > 12) return null;
       if (!Number.isInteger(minute) || minute < 0 || minute > 59) return null;
 
-      let hour = hour12 % 12;
+      hour = hour12 % 12;
       if (meridiem === 'PM') hour += 12;
-
-      const idx = explicit.index || 0;
-      const nearTime = rulesText.slice(
-        Math.max(0, idx - 24),
-        Math.min(rulesText.length, idx + explicit[0].length + 100)
-      );
-
-      const timeZone = resolveTimeZoneFromText(nearTime) || resolveTimeZoneFromText(rulesText);
-      if (!timeZone) return null;
-
-      return { timeZone, hour, minute, second: 59 };
+      pivotIndex = explicit.index || 0;
     }
 
-    const timeZone = resolveTimeZoneFromText(rulesText);
+    const nearPivot = rulesText.slice(
+      Math.max(0, pivotIndex - 120),
+      Math.min(rulesText.length, pivotIndex + 120)
+    );
+
+    const timeZone = resolveTimeZoneFromText(nearPivot) || resolveTimeZoneFromText(rulesText);
     if (!timeZone) return null;
 
-    return { timeZone, hour: 23, minute: 59, second: 59 };
+    const dateParts = findClosestDatePartsInText(rulesText, pivotIndex);
+    return { timeZone, hour, minute, second: 59, dateParts };
+  }
+
+  function findClosestDatePartsInText(text, pivotIndex) {
+    if (!text) return null;
+
+    const candidates = [];
+    const addCandidates = (regex, kind) => {
+      regex.lastIndex = 0;
+      let match;
+      while ((match = regex.exec(text))) {
+        const parsed = parseOutcomeMatch(match, kind);
+        if (!parsed) continue;
+
+        const center = match.index + Math.floor(match[0].length / 2);
+        const distance = Math.abs(center - pivotIndex);
+        candidates.push({ parsed, distance, hasYear: !!parsed.year });
+      }
+    };
+
+    addCandidates(/\bWeek of\s+([A-Za-z]+)\s+(\d{1,2})(?:,\s*(\d{4}))?\b/ig, 'week');
+    addCandidates(/\bby\s+([A-Za-z]+)\s+(\d{1,2})(?:,\s*(\d{4}))?\b/ig, 'date');
+    addCandidates(/\b([A-Za-z]+)\s+(\d{1,2}),\s*(\d{4})\b/ig, 'date');
+
+    if (!candidates.length) return null;
+
+    candidates.sort((a, b) => {
+      const scoreA = (a.hasYear ? 0 : 1000) + a.distance;
+      const scoreB = (b.hasYear ? 0 : 1000) + b.distance;
+      return scoreA - scoreB;
+    });
+
+    return candidates[0].parsed;
   }
 
   function parseOutcomeMatch(match, kind) {
@@ -524,10 +595,7 @@
     const fromOutcomesExact = extractOutcomeDatePartsExact(outcomesOpenRoot);
     if (fromOutcomesExact) return fromOutcomesExact;
 
-    // Fall back to loose parsing only after exact strategies fail.
-    const fromTradeWidgetLoose = extractOutcomeDateParts(tradeWidgetRoot);
-    if (fromTradeWidgetLoose) return fromTradeWidgetLoose;
-
+    // Loose parsing is allowed only in outcomes root, never in the whole trade widget.
     const fromOutcomesLoose = extractOutcomeDateParts(outcomesOpenRoot);
     if (fromOutcomesLoose) return fromOutcomesLoose;
 
@@ -568,7 +636,7 @@
     const cutoff = parseRulesCutoff();
     if (!cutoff) return null;
 
-    const dateParts = getActiveOutcomeDateParts();
+    const dateParts = cutoff.dateParts || getActiveOutcomeDateParts();
     if (!dateParts) return null;
 
     const startDate = startDateIso ? new Date(startDateIso) : null;
@@ -646,7 +714,7 @@
     }
 
     if (orderType === 'market') {
-      const anchor = pickVisibleAnchor(widget, MARKET_ANCHOR_SELECTOR);
+      const anchor = pickVisibleAnchor(widget, MARKET_ANCHOR_SELECTORS);
       if (!anchor) return false;
       if (state.dom.container.nextElementSibling === anchor) return true;
       anchor.insertAdjacentElement('beforebegin', state.dom.container);
@@ -668,12 +736,31 @@
     const candidates = widget.querySelectorAll(
       '#outcome-buttons [data-state="checked"], ' +
       '#outcome-buttons [role="radio"][aria-checked="true"], ' +
-      '[role="radiogroup"] [role="radio"][aria-checked="true"]'
+      '.trading-button[data-state="checked"], ' +
+      '.trading-button[aria-checked="true"]'
     );
 
+    let fallbackParsed = null;
+
+    // React transitions can keep stale checked radios in the DOM briefly.
+    // Prefer only visible checked outcomes to avoid reading stale prices.
     for (const candidate of candidates) {
       const parsed = parseCents(candidate.innerText || candidate.textContent || '');
-      if (parsed !== null) return parsed;
+      if (parsed === null) continue;
+
+      if (fallbackParsed === null) fallbackParsed = parsed;
+
+      if (!isElementVisible(candidate)) continue;
+
+      state.lastOutcomePrice = parsed;
+      return parsed;
+    }
+
+    if (isFinite(state.lastOutcomePrice)) return state.lastOutcomePrice;
+
+    if (fallbackParsed !== null) {
+      state.lastOutcomePrice = fallbackParsed;
+      return fallbackParsed;
     }
 
     return 0;
@@ -710,10 +797,22 @@
     const widget = document.getElementById('trade-widget');
     if (!widget) return;
 
-    if (!isBuyActive(widget)) {
+    const buyActive = isBuyActive(widget);
+    if (state.lastBuyActive !== null && state.lastBuyActive !== buyActive) {
+      if (buyActive) {
+        armSideSwitchSettle();
+      } else {
+        state.lastOutcomePrice = null;
+      }
+    }
+    state.lastBuyActive = buyActive;
+
+    if (!buyActive) {
       if (state.dom.container) state.dom.container.style.display = 'none';
       return;
     }
+
+    if (shouldWaitForSideSwitchSettle(true)) return;
 
     const orderType = getOrderType(widget);
     if (orderType === 'market') {
