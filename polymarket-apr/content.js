@@ -49,11 +49,7 @@
   const CLASS_INACTIVE = 'text-neutral-500 text-[20px] leading-6 font-medium';
 
   const LIMIT_ANCHOR_SELECTOR = '.limit-trade-info';
-  const MARKET_ANCHOR_SELECTORS = [
-    '.flex.flex-col.gap-4 > .flex.flex-1',
-    '.flex.flex-col.gap-4 > button',
-    '.flex.flex-col.gap-4'
-  ];
+  const MARKET_ANCHOR_SELECTOR = '.flex.flex-col.gap-4 > .flex.flex-1';
   const CENTS_PATTERN = /(\d+(?:[.,]\d+)?)\s*\u00A2/;
   const STABILITY_DELAY_MS = 120;
   const MARKET_SWITCH_SETTLE_MS = 360;
@@ -96,7 +92,7 @@
     if (widget.querySelector('button[value="LIMIT"][data-state="checked"]')) return 'limit';
 
     const hasVisibleLimitAnchor = !!pickVisibleAnchor(widget, LIMIT_ANCHOR_SELECTOR);
-    const hasVisibleMarketAnchor = !!pickVisibleAnchor(widget, MARKET_ANCHOR_SELECTORS);
+    const hasVisibleMarketAnchor = !!pickVisibleAnchor(widget, MARKET_ANCHOR_SELECTOR);
 
     if (hasVisibleLimitAnchor && !hasVisibleMarketAnchor) return 'limit';
     if (hasVisibleMarketAnchor && !hasVisibleLimitAnchor) return 'market';
@@ -121,6 +117,25 @@
     }
 
     return null;
+  }
+
+  function getActiveTradeWidget() {
+    const widgets = document.querySelectorAll('#trade-widget');
+    if (!widgets.length) return null;
+
+    let visibleFallback = null;
+
+    for (const widget of widgets) {
+      if (!isElementVisible(widget)) continue;
+      if (!visibleFallback) visibleFallback = widget;
+
+      // Prefer the interactive, currently visible trade widget.
+      const hasModeSwitcher = !!widget.querySelector('button[aria-label="side selection"]');
+      const hasOutcomeControls = !!widget.querySelector('#outcome-buttons, [role="radiogroup"]');
+      if (hasModeSwitcher && hasOutcomeControls) return widget;
+    }
+
+    return visibleFallback || widgets[0] || null;
   }
 
   function removeDuplicateAprRows() {
@@ -585,7 +600,7 @@
 
   function getActiveOutcomeDateParts() {
     const outcomesOpenRoot = document.querySelector('#outcomes [data-state="open"]');
-    const tradeWidgetRoot = document.querySelector('#trade-widget');
+    const tradeWidgetRoot = getActiveTradeWidget();
 
     // Prefer the currently selected short label in trade widget.
     const fromTradeWidgetExact = extractOutcomeDatePartsExact(tradeWidgetRoot);
@@ -714,7 +729,7 @@
     }
 
     if (orderType === 'market') {
-      const anchor = pickVisibleAnchor(widget, MARKET_ANCHOR_SELECTORS);
+      const anchor = pickVisibleAnchor(widget, MARKET_ANCHOR_SELECTOR);
       if (!anchor) return false;
       if (state.dom.container.nextElementSibling === anchor) return true;
       anchor.insertAdjacentElement('beforebegin', state.dom.container);
@@ -794,7 +809,7 @@
   }
 
   function update() {
-    const widget = document.getElementById('trade-widget');
+    const widget = getActiveTradeWidget();
     if (!widget) return;
 
     const buyActive = isBuyActive(widget);
