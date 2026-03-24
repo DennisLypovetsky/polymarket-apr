@@ -1,52 +1,32 @@
-# Visual Workflow (v1.2)
+# Visual Workflow (Extension-Only)
 
-Combined workflow to get fast visual feedback and still validate real extension behavior before commits.
+Single workflow for development and release verification using only unpacked Chrome Extension mode.
 
 ## Source of Truth
 
 - Main code: `polymarket-apr/content.js`
-- `dev/polymarket-apr-dev.user.js` is for fast iteration only.
-- After accepting any userscript change, transfer it into `polymarket-apr/content.js`.
+- Runtime package: `polymarket-apr/`
 
-## Quick Start (Now)
+## Workflow
 
-1. Import `dev/polymarket-apr-dev.user.js` into Tampermonkey.
-2. Open a Polymarket market page.
-3. Toggle between mode A and mode B as needed.
+1. Open `chrome://extensions`.
+2. Ensure Developer mode is enabled.
+3. Load unpacked extension from `polymarket-apr/` (or keep it loaded).
+4. After each code change, click `Reload` on the extension card.
+5. Hard refresh Polymarket tab with `Ctrl+Shift+R`.
+6. Validate behavior on target markets.
 
-## Mode A: Fast Iteration (Userscript)
+## Required Checks Before Commit
 
-1. Disable the unpacked Chrome extension.
-2. Enable userscript `dev/polymarket-apr-dev.user.js` in Tampermonkey (or equivalent).
-3. Refresh Polymarket tab.
-4. Edit userscript and refresh page to see visual updates immediately.
+1. `BUY`: APR is visible and updates correctly.
+2. `SELL`: APR is hidden.
+3. `Limit/Market`: APR appears in the correct position with no duplicates.
+4. Tooltip/time tag and animation remain correct.
+5. No APR-related runtime errors in console.
 
-## Mode B: Release Verification (Unpacked Extension)
+## Release Verification
 
-1. Disable userscript.
-2. Enable unpacked extension loaded from `polymarket-apr/`.
-3. Click `Reload` for the extension in `chrome://extensions`.
-4. Hard refresh Polymarket tab with `Ctrl+Shift+R`.
-
-## Rules
-
-1. Use fast mode for UI iteration speed.
-2. Move accepted changes to `polymarket-apr/content.js`.
-3. Always run release verification mode before committing.
-4. Never run userscript and extension at the same time on the same tab.
-
-## Optional Sync Helpers
-
-- Update userscript from extension source:
-  - `powershell -ExecutionPolicy Bypass -File dev/Sync-ContentToUserscript.ps1`
-- Move accepted userscript changes back to extension source:
-  - `powershell -ExecutionPolicy Bypass -File dev/Sync-UserscriptToContent.ps1`
-
-## Acceptance Checklist
-
-1. Fast mode: APR appears/updates without extension reload.
-2. Release mode: behavior matches fast mode after reload + hard refresh.
-3. In release mode:
-   - `SELL` hides APR row.
-   - `BUY` shows APR row.
-   - Tooltip and animation are correct.
+1. Confirm `manifest.json` version is correct.
+2. Run smoke/regression scenarios from `TESTING_PRINCIPLES.md`.
+3. Build release ZIP from `polymarket-apr/`.
+4. Upload ZIP as GitHub Release asset.

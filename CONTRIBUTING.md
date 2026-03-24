@@ -36,20 +36,16 @@ git checkout -b feature/<name>
 
 ## Development Workflow (Required)
 
-- Follow [VISUAL_WORKFLOW.md](VISUAL_WORKFLOW.md) for the combined fast/release cycle.
-- Fast mode (userscript): `dev/polymarket-apr-dev.user.js`.
-- Release mode (extension): `polymarket-apr/`.
-- Sync helpers: `dev/Sync-ContentToUserscript.ps1`, `dev/Sync-UserscriptToContent.ps1`.
+- Follow [VISUAL_WORKFLOW.md](VISUAL_WORKFLOW.md) for the extension-only cycle.
+- Development and release verification use only unpacked extension mode from `polymarket-apr/`.
 - Source of truth is always `polymarket-apr/content.js`.
-- Never keep userscript and extension enabled together on the same Polymarket tab.
 
 Before commit, run the visual gate:
 
-1. Disable userscript.
-2. Enable unpacked extension from `polymarket-apr/`.
-3. Reload extension in `chrome://extensions`.
-4. Hard refresh Polymarket (`Ctrl+Shift+R`).
-5. Verify APR block updates correctly, is hidden on `SELL`, visible on `BUY`, and tooltip/animation behavior remains correct.
+1. Enable unpacked extension from `polymarket-apr/`.
+2. Reload extension in `chrome://extensions`.
+3. Hard refresh Polymarket (`Ctrl+Shift+R`).
+4. Verify APR block updates correctly, is hidden on `SELL`, visible on `BUY`, and tooltip/animation behavior remains correct.
 
 ## Git Identity
 

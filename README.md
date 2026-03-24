@@ -22,7 +22,6 @@ The latest Chrome version is available in the Chrome Web Store:
 ## Repository Structure
 
 - `polymarket-apr/` - extension source used for development and testing
-- `dev/` - local userscript workflow files for fast visual iteration
 - `releases/` - release metadata/docs + one current local ZIP artifact (ZIP binaries are not committed)
 - `pictures/` - icons, screenshots, and promo assets
 
