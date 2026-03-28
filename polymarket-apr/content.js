@@ -419,6 +419,28 @@
     }
   }
 
+  function getDatePartsInTimeZone(date, timeZone) {
+    if (!isValidDate(date) || !timeZone) return null;
+
+    try {
+      const parts = new Intl.DateTimeFormat('en-US', {
+        timeZone,
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+      }).formatToParts(date);
+
+      const year = parseInt(parts.find((p) => p.type === 'year')?.value || '', 10);
+      const month = parseInt(parts.find((p) => p.type === 'month')?.value || '', 10);
+      const day = parseInt(parts.find((p) => p.type === 'day')?.value || '', 10);
+
+      if (!Number.isInteger(year) || !Number.isInteger(month) || !Number.isInteger(day)) return null;
+      return { year, monthIndex: month - 1, day };
+    } catch {
+      return null;
+    }
+  }
+
   function resolveTimeZoneFromText(text) {
     if (!text) return null;
 
@@ -647,7 +669,7 @@
     );
   }
 
-  function getFallbackDateFromRules(startDateIso) {
+  function getFallbackDateFromRules(startDateIso, eventEndDate) {
     const cutoff = parseRulesCutoff();
     if (!cutoff) return null;
 
@@ -655,9 +677,24 @@
     if (!dateParts) return null;
 
     const startDate = startDateIso ? new Date(startDateIso) : null;
+    const endDateHint = isValidDate(eventEndDate) ? eventEndDate : null;
     const safeStartDate = isValidDate(startDate) ? startDate : null;
     let year = dateParts.year ||
       (safeStartDate ? safeStartDate.getUTCFullYear() : getCurrentYearInTimeZone(cutoff.timeZone));
+
+    if (!dateParts.year && endDateHint) {
+      const utcMonthMatch = endDateHint.getUTCMonth() === dateParts.monthIndex;
+      const utcDayMatch = endDateHint.getUTCDate() === dateParts.day;
+      const tzParts = getDatePartsInTimeZone(endDateHint, cutoff.timeZone);
+      const tzMonthMatch = tzParts?.monthIndex === dateParts.monthIndex;
+      const tzDayMatch = tzParts?.day === dateParts.day;
+
+      if (utcMonthMatch && utcDayMatch) {
+        year = endDateHint.getUTCFullYear();
+      } else if (tzMonthMatch && tzDayMatch && Number.isInteger(tzParts.year)) {
+        year = tzParts.year;
+      }
+    }
 
     if (!Number.isInteger(year)) return null;
 
@@ -675,13 +712,13 @@
 
   function getSmartDate() {
     const eventData = getEventJsonLd();
+    const eventEndDate = eventData?.endDate ? new Date(eventData.endDate) : null;
 
-    const fallbackDate = getFallbackDateFromRules(eventData?.startDate || null);
+    const fallbackDate = getFallbackDateFromRules(eventData?.startDate || null, eventEndDate);
     if (isValidDate(fallbackDate)) return fallbackDate;
 
-    if (eventData?.endDate) {
-      const endDate = new Date(eventData.endDate);
-      if (isValidDate(endDate)) return endDate;
+    if (isValidDate(eventEndDate)) {
+      return eventEndDate;
     }
 
     return null;

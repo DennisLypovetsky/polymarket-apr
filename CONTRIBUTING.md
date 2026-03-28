@@ -26,13 +26,16 @@ git checkout -b feature/<name>
 1. Create or update a feature branch from `main`.
 2. Implement and test changes in `polymarket-apr/`.
 3. Run APR checks from [TESTING_PRINCIPLES.md](TESTING_PRINCIPLES.md).
-4. Validate in Chrome via unpacked extension.
-5. Delete previous release ZIP from `releases/` (if present).
-6. Build local release archive `releases/polymarket-apr-vX.Y.zip`.
-7. Upload the ZIP as a GitHub Release asset (do not commit ZIP binaries).
-8. Merge the branch into `main`.
-9. Create Git tag `vX.Y`.
-10. Push branch, `main`, and tags to GitHub.
+4. Run mandatory end-date regression scan:
+   - `node .local/enddate-regression-scan.js --max-events 5000 --page-size 200 --out .local/enddate-regression-report.json`
+5. For every `high-confidence` row in `.local/enddate-regression-report.json`, run manual smoke validation in unpacked extension mode and confirm no premature `Ended`.
+6. Validate in Chrome via unpacked extension.
+7. Delete previous release ZIP from `releases/` (if present).
+8. Build local release archive `releases/polymarket-apr-vX.Y.zip`.
+9. Upload the ZIP as a GitHub Release asset (do not commit ZIP binaries).
+10. Merge the branch into `main`.
+11. Create Git tag `vX.Y`.
+12. Push branch, `main`, and tags to GitHub.
 
 ## Development Workflow (Required)
 

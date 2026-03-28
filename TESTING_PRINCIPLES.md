@@ -46,6 +46,16 @@
    - at least one market with end date in the current year;
    - at least one market with end date in the next year.
 
+## Mandatory Pre-Release Gate (End-Date Regression)
+
+Before packaging/uploading a release, run:
+
+```bash
+node .local/enddate-regression-scan.js --max-events 5000 --page-size 200 --out .local/enddate-regression-report.json
+```
+
+If `.local/enddate-regression-report.json` contains `highConfidence` rows, each listed market URL must be manually smoke-tested in unpacked extension mode.
+
 ## Bug Report Format
 
 Use the following template:

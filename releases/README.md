@@ -23,7 +23,10 @@ ZIP files are built locally for publishing and uploaded to GitHub Releases as as
 
 ## Publish flow (summary)
 
-1. Delete previous ZIP from `releases/` (if present).
-2. Build new ZIP locally from `polymarket-apr/`.
-3. Create/publish GitHub Release for tag `vX.Y`.
-4. Upload ZIP as a release asset.
+1. Run end-date regression gate:
+   - `node .local/enddate-regression-scan.js --max-events 5000 --page-size 200 --out .local/enddate-regression-report.json`
+2. If the report has `high-confidence` rows, manually smoke-check each listed market URL and confirm no premature `Ended`.
+3. Delete previous ZIP from `releases/` (if present).
+4. Build new ZIP locally from `polymarket-apr/`.
+5. Create/publish GitHub Release for tag `vX.Y`.
+6. Upload ZIP as a release asset.
