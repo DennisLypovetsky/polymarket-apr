@@ -80,6 +80,14 @@
   }
 
   function getOrderType(widget) {
+    const visibleModeButton = Array.from(widget.querySelectorAll('button')).find((button) => {
+      if (!isElementVisible(button)) return false;
+      const text = normalizeSpaces(button.textContent || '').toLowerCase();
+      return text === 'limit' || text === 'market';
+    });
+    const visibleModeText = normalizeSpaces(visibleModeButton?.textContent || '').toLowerCase();
+    if (visibleModeText === 'limit' || visibleModeText === 'market') return visibleModeText;
+
     const sideSelectionBtn = widget.querySelector('button[aria-label="side selection"]');
     const sideLabel = normalizeSpaces(sideSelectionBtn?.querySelector('p,span')?.textContent || '').toLowerCase();
     const sideText = normalizeSpaces(sideSelectionBtn?.textContent || '').toLowerCase();
@@ -673,7 +681,9 @@
     const cutoff = parseRulesCutoff();
     if (!cutoff) return null;
 
-    const dateParts = cutoff.dateParts || getActiveOutcomeDateParts();
+    // Prefer the currently selected outcome label over incidental dates
+    // mentioned inside the rules text (examples, market-opened timestamps).
+    const dateParts = getActiveOutcomeDateParts() || cutoff.dateParts;
     if (!dateParts) return null;
 
     const startDate = startDateIso ? new Date(startDateIso) : null;
