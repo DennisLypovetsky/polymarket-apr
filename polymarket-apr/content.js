@@ -49,7 +49,10 @@
   const CLASS_INACTIVE = 'text-neutral-500 text-[20px] leading-6 font-medium';
 
   const LIMIT_ANCHOR_SELECTOR = '.limit-trade-info';
-  const MARKET_ANCHOR_SELECTOR = '.flex.flex-col.gap-4 > .flex.flex-1';
+  const MARKET_ANCHOR_SELECTOR = [
+    '.flex.flex-col.gap-4 > .flex.flex-1',
+    'button.trading-button:not([value])'
+  ];
   const CENTS_PATTERN = /(\d+(?:[.,]\d+)?)\s*\u00A2/;
   const STABILITY_DELAY_MS = 120;
   const MARKET_SWITCH_SETTLE_MS = 360;
@@ -239,6 +242,116 @@
     }
 
     return null;
+  }
+
+  function readSelectedMarketName(widget) {
+    const selected = widget.querySelector('.text-base.font-semibold');
+    const text = normalizeSpaces(selected?.textContent || '');
+    if (!text || !text.includes('·')) return null;
+
+    const name = normalizeSpaces(text.split('·')[0] || '');
+    return name || null;
+  }
+
+  function elementOrAncestorContainsText(el, text) {
+    if (!el || !text) return false;
+
+    let current = el;
+    for (let depth = 0; current && depth < 6; depth += 1) {
+      if (normalizeSpaces(current.textContent || '').includes(text)) return true;
+      current = current.parentElement;
+    }
+
+    return false;
+  }
+
+  function readExternalOutcomePrice(widget, sideText) {
+    const side = normalizeSpaces(sideText || '');
+    if (!/^(?:yes|no)$/i.test(side)) return null;
+
+    const selectedMarketName = readSelectedMarketName(widget);
+    let fallbackParsed = null;
+
+    const buttons = document.querySelectorAll('button');
+    for (const button of buttons) {
+      if (widget.contains(button) || !isElementVisible(button)) continue;
+
+      const text = normalizeSpaces(button.innerText || button.textContent || '');
+      if (!new RegExp(`^Buy\\s+${side}\\b`, 'i').test(text)) continue;
+
+      const parsed = parseCents(text);
+      if (parsed === null) continue;
+      if (fallbackParsed === null) fallbackParsed = parsed;
+
+      if (selectedMarketName && elementOrAncestorContainsText(button, selectedMarketName)) {
+        return parsed;
+      }
+    }
+
+    return selectedMarketName ? null : fallbackParsed;
+  }
+
+  function parseMaybeJsonArray(value) {
+    if (Array.isArray(value)) return value;
+    if (typeof value !== 'string') return null;
+
+    try {
+      const parsed = JSON.parse(value);
+      return Array.isArray(parsed) ? parsed : null;
+    } catch {
+      return null;
+    }
+  }
+
+  function readEmbeddedOutcomePrice(sideText) {
+    const side = normalizeSpaces(sideText || '').toLowerCase();
+    if (side !== 'yes' && side !== 'no') return null;
+
+    const script = document.getElementById('__NEXT_DATA__');
+    if (!script?.textContent) return null;
+
+    let data;
+    try {
+      data = JSON.parse(script.textContent);
+    } catch {
+      return null;
+    }
+
+    const pathSlugs = location.pathname.split('/').filter(Boolean).slice(1);
+    let bestMatch = null;
+
+    const visit = (value) => {
+      if (!value || typeof value !== 'object') return;
+
+      if (Array.isArray(value)) {
+        for (const item of value) visit(item);
+        return;
+      }
+
+      const outcomes = parseMaybeJsonArray(value.outcomes);
+      const prices = parseMaybeJsonArray(value.outcomePrices);
+      if (outcomes && prices) {
+        const index = outcomes.findIndex((outcome) => normalizeSpaces(String(outcome)).toLowerCase() === side);
+        const rawPrice = index >= 0 ? parseFloat(prices[index]) : NaN;
+        const cents = rawPrice > 0 && rawPrice <= 1 ? rawPrice * 100 : rawPrice;
+
+        if (isFinite(cents) && cents > 0 && cents < 100) {
+          let score = 0;
+          if (pathSlugs.includes(value.slug)) score += 10;
+          if (pathSlugs.includes(value.eventSlug)) score += 5;
+          if (value.closed) score -= 10;
+
+          if (!bestMatch || score > bestMatch.score) {
+            bestMatch = { cents, score };
+          }
+        }
+      }
+
+      for (const child of Object.values(value)) visit(child);
+    };
+
+    visit(data);
+    return bestMatch?.cents ?? null;
   }
 
   function isExternalMarketSwitchTrigger(target) {
@@ -683,22 +796,35 @@
 
     // Prefer the currently selected outcome label over incidental dates
     // mentioned inside the rules text (examples, market-opened timestamps).
-    const dateParts = getActiveOutcomeDateParts() || cutoff.dateParts;
+    const activeDateParts = getActiveOutcomeDateParts();
+    const dateParts = activeDateParts || cutoff.dateParts;
     if (!dateParts) return null;
 
     const startDate = startDateIso ? new Date(startDateIso) : null;
     const endDateHint = isValidDate(eventEndDate) ? eventEndDate : null;
     const safeStartDate = isValidDate(startDate) ? startDate : null;
+    let utcMonthMatch = false;
+    let utcDayMatch = false;
+    let tzParts = null;
+    let tzMonthMatch = false;
+    let tzDayMatch = false;
+
+    if (endDateHint) {
+      utcMonthMatch = endDateHint.getUTCMonth() === dateParts.monthIndex;
+      utcDayMatch = endDateHint.getUTCDate() === dateParts.day;
+      tzParts = getDatePartsInTimeZone(endDateHint, cutoff.timeZone);
+      tzMonthMatch = tzParts?.monthIndex === dateParts.monthIndex;
+      tzDayMatch = tzParts?.day === dateParts.day;
+
+      if (!activeDateParts && !((utcMonthMatch && utcDayMatch) || (tzMonthMatch && tzDayMatch))) {
+        return null;
+      }
+    }
+
     let year = dateParts.year ||
       (safeStartDate ? safeStartDate.getUTCFullYear() : getCurrentYearInTimeZone(cutoff.timeZone));
 
     if (!dateParts.year && endDateHint) {
-      const utcMonthMatch = endDateHint.getUTCMonth() === dateParts.monthIndex;
-      const utcDayMatch = endDateHint.getUTCDate() === dateParts.day;
-      const tzParts = getDatePartsInTimeZone(endDateHint, cutoff.timeZone);
-      const tzMonthMatch = tzParts?.monthIndex === dateParts.monthIndex;
-      const tzDayMatch = tzParts?.day === dateParts.day;
-
       if (utcMonthMatch && utcDayMatch) {
         year = endDateHint.getUTCFullYear();
       } else if (tzMonthMatch && tzDayMatch && Number.isInteger(tzParts.year)) {
@@ -803,10 +929,15 @@
     );
 
     let fallbackParsed = null;
+    let selectedSideText = null;
 
     // React transitions can keep stale checked radios in the DOM briefly.
     // Prefer only visible checked outcomes to avoid reading stale prices.
     for (const candidate of candidates) {
+      if (!selectedSideText && isElementVisible(candidate)) {
+        selectedSideText = normalizeSpaces(candidate.textContent || '');
+      }
+
       const parsed = parseCents(candidate.innerText || candidate.textContent || '');
       if (parsed === null) continue;
 
@@ -816,6 +947,18 @@
 
       state.lastOutcomePrice = parsed;
       return parsed;
+    }
+
+    const externalParsed = readExternalOutcomePrice(widget, selectedSideText);
+    if (externalParsed !== null) {
+      state.lastOutcomePrice = externalParsed;
+      return externalParsed;
+    }
+
+    const embeddedParsed = readEmbeddedOutcomePrice(selectedSideText);
+    if (embeddedParsed !== null) {
+      state.lastOutcomePrice = embeddedParsed;
+      return embeddedParsed;
     }
 
     if (isFinite(state.lastOutcomePrice)) return state.lastOutcomePrice;
