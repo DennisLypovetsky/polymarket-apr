@@ -1,7 +1,7 @@
 ﻿{
   "manifest_version": 3,
   "name": "Polymarket APR",
-  "version": "1.2.6",
+  "version": "1.2.7",
   "description": "A simple APR calculator directly in Polymarket",
   "icons": {
     "128": "icon.png"
