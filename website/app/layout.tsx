@@ -1,25 +1,41 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { headers } from "next/headers";
 import "./globals.css";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
-});
+const title = "Polymarket APR — Compare Markets by Estimated APR";
+const description =
+  "See estimated APR inside Polymarket and compare markets with each other or with DeFi yield.";
 
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
-});
+export async function generateMetadata(): Promise<Metadata> {
+  const requestHeaders = await headers();
+  const host =
+    requestHeaders.get("x-forwarded-host") ??
+    requestHeaders.get("host") ??
+    "localhost:3000";
+  const protocol =
+    requestHeaders.get("x-forwarded-proto") ??
+    (host.startsWith("localhost") ? "http" : "https");
+  const metadataBase = new URL(`${protocol}://${host}`);
+  const socialImage = new URL("/og.png", metadataBase).toString();
 
-export const metadata: Metadata = {
-  title: "Starter Project",
-  description: "A clean starting point for building your site.",
-  icons: {
-    icon: "/favicon.svg",
-    shortcut: "/favicon.svg",
-  },
-};
+  return {
+    metadataBase,
+    title,
+    description,
+    icons: { icon: "/icon.png" },
+    openGraph: {
+      title,
+      description,
+      images: [socialImage],
+    },
+    twitter: {
+      card: "summary_large_image",
+      title,
+      description,
+      images: [socialImage],
+    },
+  };
+}
 
 export default function RootLayout({
   children,
@@ -28,11 +44,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
-      >
-        {children}
-      </body>
+      <body>{children}</body>
     </html>
   );
 }
