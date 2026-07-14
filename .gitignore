@@ -1,3 +1,4 @@
 releases/*.zip
+website/
 .playwright-cli/
 .superpowers/
