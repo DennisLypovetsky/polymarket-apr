@@ -416,6 +416,7 @@
   const DATE_LABEL_RE = /^(?:by\s+)?([A-Za-z]+)\s+(\d{1,2})(?:,\s*(\d{4}))?$/i;
   const WEEK_OF_FREE_RE = /\bWeek of\s+([A-Za-z]+)\s+(\d{1,2})(?:,\s*(\d{4}))?\b/i;
   const DATE_FREE_RE = /\bby\s+([A-Za-z]+)\s+(\d{1,2})(?:,\s*(\d{4}))?\b/i;
+  const SCHEDULED_DATE_RE = /\b(?:currently\s+)?scheduled\s+for\s+([A-Za-z]+)\s+(\d{1,2})(?:,\s*(\d{4}))?\b/ig;
   const IANA_TZ_RE = /\b([A-Za-z_]+\/[A-Za-z_]+(?:\/[A-Za-z_]+)?)\b/g;
   const RULES_START_RE = /This market will resolve/i;
   const EXPLICIT_TIME_RE = /\b(\d{1,2})(?::(\d{2}))?\s*(AM|PM)\b/i;
@@ -635,10 +636,12 @@
       Math.min(rulesText.length, pivotIndex + 120)
     );
 
-    const timeZone = resolveTimeZoneFromText(nearPivot) || resolveTimeZoneFromText(rulesText);
+    const dateParts = findClosestDatePartsInText(rulesText, pivotIndex);
+    const timeZone = resolveTimeZoneFromText(nearPivot) ||
+      resolveTimeZoneFromText(rulesText) ||
+      (dateParts?.kind === 'scheduled' ? 'UTC' : null);
     if (!timeZone) return null;
 
-    const dateParts = findClosestDatePartsInText(rulesText, pivotIndex);
     return { timeZone, hour, minute, second: 59, dateParts };
   }
 
@@ -661,6 +664,7 @@
 
     addCandidates(/\bWeek of\s+([A-Za-z]+)\s+(\d{1,2})(?:,\s*(\d{4}))?\b/ig, 'week');
     addCandidates(/\bby\s+([A-Za-z]+)\s+(\d{1,2})(?:,\s*(\d{4}))?\b/ig, 'date');
+    addCandidates(SCHEDULED_DATE_RE, 'scheduled');
     addCandidates(/\b([A-Za-z]+)\s+(\d{1,2}),\s*(\d{4})\b/ig, 'date');
 
     if (!candidates.length) return null;
@@ -838,7 +842,10 @@
     let endDate = buildOutcomeEndDate(dateParts, year, cutoff);
     if (!isValidDate(endDate)) return null;
 
-    if (!dateParts.year && safeStartDate && endDate.getTime() < safeStartDate.getTime()) {
+    const referenceDate = dateParts.kind === 'scheduled'
+      ? new Date(Math.max(safeStartDate?.getTime() || 0, Date.now()))
+      : safeStartDate;
+    if (!dateParts.year && referenceDate && endDate.getTime() < referenceDate.getTime()) {
       year += 1;
       endDate = buildOutcomeEndDate(dateParts, year, cutoff);
       if (!isValidDate(endDate)) return null;
