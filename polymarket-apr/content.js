@@ -51,8 +51,9 @@
   const LIMIT_ANCHOR_SELECTOR = '.limit-trade-info';
   const MARKET_ANCHOR_SELECTOR = [
     '.flex.flex-col.gap-4 > .flex.flex-1',
-    'button.trading-button:not([value])'
+    '.flex.flex-col.gap-4 > .flex.flex-col.gap-2.w-full'
   ];
+  const MARKET_BUTTON_SELECTOR = 'button.trading-button:not([value])';
   const CENTS_PATTERN = /(\d+(?:[.,]\d+)?)\s*\u00A2/;
   const STABILITY_DELAY_MS = 120;
   const MARKET_SWITCH_SETTLE_MS = 360;
@@ -857,7 +858,23 @@
       return eventEndDate;
     }
 
+    const visibleExpiryDate = getVisibleExpiryDate();
+    if (isValidDate(visibleExpiryDate)) return visibleExpiryDate;
+
     return null;
+  }
+
+  function getVisibleExpiryDate() {
+    const scope = document.querySelector('main') || document.body;
+    const text = normalizeSpaces(scope?.textContent || '');
+    const match = text.match(/\bExpires\s+(?:(\d+)\s*d)?\s*(?:(\d+)\s*h)?\s*(?:(\d+)\s*m)?\b/i);
+    if (!match) return null;
+
+    const days = parseInt(match[1] || '0', 10);
+    const hours = parseInt(match[2] || '0', 10);
+    const minutes = parseInt(match[3] || '0', 10);
+    const durationMs = ((days * 24 + hours) * 60 + minutes) * 60000;
+    return durationMs > 0 ? new Date(Date.now() + durationMs) : null;
   }
 
   function createWidget() {
@@ -902,7 +919,9 @@
     }
 
     if (orderType === 'market') {
-      const anchor = pickVisibleAnchor(widget, MARKET_ANCHOR_SELECTOR);
+      const structuredAnchor = pickVisibleAnchor(widget, MARKET_ANCHOR_SELECTOR);
+      const tradeButton = pickVisibleAnchor(widget, MARKET_BUTTON_SELECTOR);
+      const anchor = structuredAnchor || tradeButton?.closest('.flex.flex-col.gap-2.w-full');
       if (!anchor) return false;
       if (state.dom.container.nextElementSibling === anchor) return true;
       anchor.insertAdjacentElement('beforebegin', state.dom.container);
