@@ -857,7 +857,23 @@
       return eventEndDate;
     }
 
+    const visibleExpiryDate = getVisibleExpiryDate();
+    if (isValidDate(visibleExpiryDate)) return visibleExpiryDate;
+
     return null;
+  }
+
+  function getVisibleExpiryDate() {
+    const scope = document.querySelector('main') || document.body;
+    const text = normalizeSpaces(scope?.textContent || '');
+    const match = text.match(/\bExpires\s+(?:(\d+)\s*d)?\s*(?:(\d+)\s*h)?\s*(?:(\d+)\s*m)?\b/i);
+    if (!match) return null;
+
+    const days = parseInt(match[1] || '0', 10);
+    const hours = parseInt(match[2] || '0', 10);
+    const minutes = parseInt(match[3] || '0', 10);
+    const durationMs = ((days * 24 + hours) * 60 + minutes) * 60000;
+    return durationMs > 0 ? new Date(Date.now() + durationMs) : null;
   }
 
   function createWidget() {
