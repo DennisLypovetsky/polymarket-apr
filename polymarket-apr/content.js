@@ -437,6 +437,8 @@
   };
 
   const TZ_ALIAS = [
+    { re: /\bCEST\b/i, timeZone: 'Europe/Berlin' },
+    { re: /\bCET\b/i, timeZone: 'Europe/Berlin' },
     { re: /\bEastern European Time\b/i, timeZone: 'Europe/Kyiv' },
     { re: /\bEEST\b/i, timeZone: 'Europe/Kyiv' },
     { re: /\bEET\b/i, timeZone: 'Europe/Kyiv' },
@@ -486,6 +488,170 @@
         const data = JSON.parse(s.textContent || '');
         if (data?.['@type'] === 'Event') return data;
       } catch { }
+    }
+    return null;
+  }
+
+  let embeddedEventCache = { slug: null, texts: [], event: null };
+
+  function getEmbeddedEvent() {
+    const slug = location.pathname.split('/').filter(Boolean)[1];
+    if (!slug) return null;
+
+    const texts = Array.from(document.scripts)
+      .filter((script) => script.id === '__NEXT_DATA__' ||
+        script.textContent.startsWith('self.__next_f.push('))
+      .map((script) => script.textContent);
+    if (embeddedEventCache.slug === slug && texts.length === embeddedEventCache.texts.length &&
+      texts.every((text, index) => text === embeddedEventCache.texts[index])) {
+      return embeddedEventCache.event;
+    }
+
+    let event = null;
+    const visit = (value) => {
+      if (event || !value || typeof value !== 'object') return;
+      if (value.slug === slug && Array.isArray(value.markets)) {
+        event = value;
+        return;
+      }
+      for (const child of Object.values(value)) visit(child);
+    };
+
+    let payload = '';
+    for (const text of texts) {
+      try {
+        const push = text.match(/^self\.__next_f\.push\(([\s\S]+)\);?$/);
+        if (push) {
+          const chunk = JSON.parse(push[1]);
+          if (chunk[0] === 1 && typeof chunk[1] === 'string') payload += chunk[1];
+        } else {
+          visit(JSON.parse(text));
+        }
+      } catch { }
+    }
+
+    // Read embedded page data without executing the site's scripts.
+    for (const record of payload.matchAll(/[\da-f]+:(\["\$",[^\n]+)/g)) {
+      if (event) break;
+      if (!record[1].includes('"markets"')) continue;
+      try {
+        visit(JSON.parse(record[1]));
+      } catch { }
+    }
+
+    embeddedEventCache = { slug, texts, event };
+    return event;
+  }
+
+  function getSelectedMarket() {
+    const event = getEmbeddedEvent();
+    if (!event) return null;
+
+    const widget = getActiveTradeWidget();
+    const name = widget ? readSelectedMarketName(widget) : null;
+    const marketSlug = location.pathname.split('/').filter(Boolean)[2];
+    return name
+      ? event.markets.find((item) => normalizeSpaces(item.groupItemTitle) === name)
+      : event.markets.find((item) => item.slug === marketSlug) ||
+        (event.markets.length === 1 ? event.markets[0] : null);
+  }
+
+  function getSelectedMarketEndDate() {
+    const market = getSelectedMarket();
+    const endDate = market?.endDate ? new Date(market.endDate) : null;
+    return isValidDate(endDate) ? endDate : null;
+  }
+
+  const resolutionCache = new Map();
+  let resolutionRequestsStopped = false;
+
+  function getFetchedResolution(market) {
+    const conditionId = market?.conditionId;
+    if (!/^0x[\da-f]{64}$/i.test(conditionId || '')) return null;
+
+    let entry = resolutionCache.get(conditionId);
+    if (!entry) {
+      entry = { checked: false, status: null, lastAttempt: 0, controller: null };
+      resolutionCache.set(conditionId, entry);
+    }
+    if (!resolutionRequestsStopped && !entry.controller && entry.status !== 'resolved' &&
+      (!entry.lastAttempt || Date.now() - entry.lastAttempt >= 20000)) {
+      entry.lastAttempt = Date.now();
+      entry.controller = new AbortController();
+      const controller = entry.controller;
+      const timeoutId = setTimeout(() => controller.abort(), 10000);
+      fetch(`/api/market/resolution/${conditionId}`, {
+        credentials: 'omit', signal: controller.signal
+      }).then((response) => {
+        if (!response.ok) throw new Error('Resolution request failed');
+        return response.json();
+      }).then((result) => {
+        if (result?.conditionId?.toLowerCase() !== conditionId.toLowerCase() ||
+          !Object.prototype.hasOwnProperty.call(result, 'data') ||
+          (result.data !== null && typeof result.data?.status !== 'string')) {
+          throw new Error('Invalid resolution response');
+        }
+        entry.status = result.data?.status || null;
+        entry.checked = true;
+      }).catch(() => {
+        // Keep the last verified state; an unverified outcome has no APR estimate.
+      }).finally(() => {
+        clearTimeout(timeoutId);
+        entry.controller = null;
+        if (!resolutionRequestsStopped) scheduleUpdate();
+      });
+    }
+    return entry;
+  }
+
+  function getMarketResolutionState() {
+    const market = getSelectedMarket();
+    const fetched = getFetchedResolution(market);
+    const widget = getActiveTradeWidget();
+    const name = (widget ? readSelectedMarketName(widget) : null) ||
+      market?.groupItemTitle || market?.question;
+    const visibleStatus = getVisibleMarketResolutionStatus(name);
+    const status = visibleStatus || fetched?.status || market?.umaResolutionStatus;
+    if (market?.closed || fetched?.status === 'resolved' ||
+      market?.umaResolutionStatus === 'resolved' || status === 'resolved') {
+      return { label: 'Ended', title: 'Market resolved; APR is no longer estimated.' };
+    }
+    if (status === 'proposed') {
+      return { label: 'In Review', title: 'Outcome proposed; awaiting final resolution.' };
+    }
+    if (status === 'disputed') {
+      return { label: 'Disputed', title: 'Outcome disputed; awaiting final resolution.' };
+    }
+    if (fetched && !fetched.checked) {
+      return { label: '--', title: fetched.controller
+        ? 'Checking market resolution.' : 'Market resolution could not be verified.' };
+    }
+    const scheduled = getScheduledAwardDate();
+    if (scheduled && scheduled.date.getTime() <= Date.now()) {
+      return { label: 'Awaiting result', title: 'Scheduled award date has passed; awaiting a confirmed result.' };
+    }
+    return null;
+  }
+
+  function getVisibleMarketResolutionStatus(name) {
+    const scope = document.querySelector('main');
+    if (!name || !scope) return null;
+    const statuses = { 'In Review': 'proposed', Disputed: 'disputed', Resolved: 'resolved' };
+    for (const button of scope.querySelectorAll('button')) {
+      const status = statuses[normalizeSpaces(button.textContent)];
+      if (!status || !isElementVisible(button)) continue;
+
+      let row = button.parentElement;
+      for (let depth = 0; row && depth < 6; depth += 1, row = row.parentElement) {
+        const hasTradeButtons = Array.from(row.querySelectorAll('button')).some((item) =>
+          /^Buy\s+(?:Yes|No)\b/i.test(normalizeSpaces(item.textContent)));
+        if (!hasTradeButtons) continue;
+        // Stop at this outcome's row; never borrow a neighboring outcome's status.
+        const matchesName = Array.from(row.querySelectorAll('p, span, h3')).some((item) =>
+          normalizeSpaces(item.textContent) === name);
+        if (matchesName) return status;
+        break;
+      }
     }
     return null;
   }
@@ -637,7 +803,12 @@
     );
 
     const dateParts = findClosestDatePartsInText(rulesText, pivotIndex);
-    const timeZone = resolveTimeZoneFromText(nearPivot) ||
+    // Bind a time to its following zone, before a parenthesized conversion.
+    const timeSuffix = explicit
+      ? rulesText.slice(pivotIndex + explicit[0].length)
+        .match(/^\s*([A-Za-z_]+(?:\/[A-Za-z_]+){1,2}|[A-Za-z]+(?:\s+(?:European\s+)?Time)?)/)?.[1] || ''
+      : '';
+    const timeZone = resolveTimeZoneFromText(timeSuffix) || resolveTimeZoneFromText(nearPivot) ||
       resolveTimeZoneFromText(rulesText) ||
       (dateParts?.kind === 'scheduled' ? 'UTC' : null);
     if (!timeZone) return null;
@@ -855,8 +1026,12 @@
   }
 
   function getSmartDate() {
+    const scheduled = getScheduledAwardDate();
+    if (scheduled) return scheduled.date;
     const eventData = getEventJsonLd();
-    const eventEndDate = eventData?.endDate ? new Date(eventData.endDate) : null;
+    // An event can contain outcomes ending earlier than its overall deadline.
+    const eventEndDate = getSelectedMarketEndDate() ||
+      (eventData?.endDate ? new Date(eventData.endDate) : null);
 
     const fallbackDate = getFallbackDateFromRules(eventData?.startDate || null, eventEndDate);
     if (isValidDate(fallbackDate)) return fallbackDate;
@@ -869,6 +1044,35 @@
     if (isValidDate(visibleExpiryDate)) return visibleExpiryDate;
 
     return null;
+  }
+
+  function getScheduledAwardDate() {
+    const rules = normalizeSpaces(getSelectedMarket()?.description || getRulesText());
+    // A ceremony date is an estimate, distinct from a conditional no-winner deadline.
+    if (!/\b(?:award|prize|grammy|oscar)\b/i.test(rules) ||
+      !/\b(?:wins?|laureate|winner)\b/i.test(rules) ||
+      !/\bIf\b[^.]{0,350}\b(?:no winner|not been announced|no official announcement|award has not)[^.]{0,150}\bby\b/i.test(rules)) {
+      return null;
+    }
+    const datePattern = '([A-Za-z]+)\\s+(\\d{1,2}),\\s*(\\d{4})';
+    const match = rules.match(new RegExp('\\bceremony\\s+(?:on|for)\\s+' + datePattern, 'i')) ||
+      rules.match(new RegExp('\\bscheduled\\s+to\\s+be\\s+(?:presented|held|awarded|announced)\\s+(?:on|for)\\s+' + datePattern, 'i'));
+    if (!match) return null;
+    const parts = parseOutcomeMatch(match, 'scheduled');
+    if (!parts || !isValidCalendarDate(parts.year, parts.monthIndex, parts.day)) return null;
+
+    const suffix = rules.slice(match.index + match[0].length);
+    const time = suffix.match(/^,?\s+at\s+(\d{1,2})(?::(\d{2}))?\s*(AM|PM)\s+([A-Za-z_/]+)/i);
+    const timeZone = time ? resolveTimeZoneFromText(time[4]) : null;
+    if (time && timeZone) {
+      const hour12 = Number(time[1]);
+      const minute = Number(time[2] || 0);
+      if (hour12 < 1 || hour12 > 12 || minute > 59) return null;
+      const hour = hour12 % 12 + (time[3].toUpperCase() === 'PM' ? 12 : 0);
+      return { date: makeDateInTimeZone(parts.year, parts.monthIndex, parts.day, hour, minute, 0, timeZone), hasTime: true };
+    }
+    // With only a calendar date, estimate through that day and show no invented time.
+    return { date: new Date(Date.UTC(parts.year, parts.monthIndex, parts.day, 23, 59, 59)), hasTime: false };
   }
 
   function getVisibleExpiryDate() {
@@ -1061,13 +1265,15 @@
     if (!ensureInserted(widget)) return;
     state.dom.container.style.display = 'flex';
 
-    const price = readPrice(widget);
-    const endDate = getSmartDate();
-    const inputKey = `${orderType || 'unknown'}|${price}|${endDate ? endDate.getTime() : 'na'}`;
+    const resolution = getMarketResolutionState();
+    const price = resolution ? null : readPrice(widget);
+    const scheduled = resolution ? null : getScheduledAwardDate();
+    const endDate = resolution ? null : getSmartDate();
+    const inputKey = `${orderType || 'unknown'}|${resolution?.label || ''}|${price}|${endDate ? endDate.getTime() : 'na'}`;
 
     if (shouldDeferRender(inputKey)) return;
 
-    let aprText = '--';
+    let aprText = resolution?.label || '--';
     let timeText = '';
     let tooltipText = '';
 
@@ -1075,7 +1281,9 @@
       const now = new Date();
       const days = (endDate - now) / 86400000;
 
-      tooltipText = `Resolves: ${endDate.toLocaleString([], {
+      tooltipText = scheduled && !scheduled.hasTime
+        ? `Expected: ${endDate.toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' })}`
+        : `${scheduled ? 'Expected' : 'Resolves'}: ${endDate.toLocaleString([], {
         month: 'short',
         day: 'numeric',
         hour: '2-digit',
@@ -1095,9 +1303,10 @@
       }
     }
 
-    const mode = aprText === 'Ended' || aprText === '--' ? 'inactive' : 'active';
+    const mode = resolution || aprText === 'Ended' || aprText === '--' ? 'inactive' : 'active';
     setValColor(mode);
 
+    state.dom.valSpan.title = resolution?.title || '';
     state.dom.timeSpan.title = tooltipText;
 
     if (state.lastAprText !== aprText) {
@@ -1139,6 +1348,8 @@
   const intervalId = setInterval(scheduleUpdate, 20000);
 
   runtime.destroy = () => {
+    resolutionRequestsStopped = true;
+    for (const entry of resolutionCache.values()) entry.controller?.abort();
     try {
       obs.disconnect();
     } catch {
