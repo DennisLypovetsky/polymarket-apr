@@ -17,12 +17,26 @@
   // Remove stale rows left by previous manual injections.
   document.querySelectorAll('#poly-custom-apr').forEach((el) => el.remove());
 
-  const STYLE_ID = 'poly-apr-styles-v18';
+  const STYLE_ID = 'poly-apr-styles-v20';
+  document.getElementById('poly-apr-styles-v18')?.remove();
+  document.getElementById('poly-apr-styles-v19')?.remove();
   if (!document.getElementById(STYLE_ID)) {
     const style = document.createElement('style');
     style.id = STYLE_ID;
     style.textContent = `
       .poly-apr-row {
+        display: grid;
+        grid-template-rows: 1fr;
+        opacity: 1;
+        transition: grid-template-rows 0.18s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.12s ease;
+      }
+
+      .poly-apr-clip {
+        overflow: hidden;
+        min-height: 0;
+      }
+
+      .poly-apr-body {
         display: flex;
         justify-content: space-between;
         align-items: center;
@@ -31,16 +45,30 @@
         border-top: 1px dashed var(--color-border, rgba(255,255,255,0.1));
       }
 
+      .poly-apr-row.poly-apr-hidden {
+        grid-template-rows: 0fr;
+        opacity: 0;
+        pointer-events: none;
+      }
+
       @keyframes polyFadeSlide {
-        0% { opacity: 0; transform: translateY(4px); }
-        100% { opacity: 1; transform: translateY(0); }
+        0% { opacity: 0; }
+        100% { opacity: 1; }
       }
 
       .poly-anim-enter {
-        animation: polyFadeSlide 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+        animation: polyFadeSlide 0.12s ease;
       }
 
       .poly-apr-time { cursor: help; }
+
+      @media (prefers-reduced-motion: reduce) {
+        .poly-apr-row,
+        .poly-anim-enter {
+          transition: none;
+          animation: none;
+        }
+      }
     `;
     document.head.appendChild(style);
   }
@@ -58,6 +86,38 @@
   const STABILITY_DELAY_MS = 120;
   const MARKET_SWITCH_SETTLE_MS = 360;
   const SIDE_SWITCH_SETTLE_MS = 260;
+
+  // polymarket.com hreflang locales. English has no prefix. en-US is polymarket.us.
+  const LOCALES = new Set([
+    'bn', 'de', 'es', 'fr', 'hi', 'id', 'it', 'ja', 'pl', 'ru',
+    'th', 'tl', 'uk', 'vi', 'zh', 'zh-hant'
+  ]);
+
+  function getRouteParts() {
+    const parts = location.pathname.split('/').filter(Boolean);
+    if (parts.length && LOCALES.has(parts[0].toLowerCase())) return parts.slice(1);
+    return parts;
+  }
+
+  function controlValue(el) {
+    return (el?.getAttribute('value') || '').toUpperCase();
+  }
+
+  function isCheckedControl(el) {
+    if (!el) return false;
+    return el.getAttribute('data-state') === 'checked' || el.getAttribute('aria-checked') === 'true';
+  }
+
+  // Buy/Sell and Market/Limit keep these values when the visible label is translated.
+  function findCheckedValue(root, value) {
+    if (!root) return null;
+    const wanted = value.toUpperCase();
+    const nodes = root.querySelectorAll('button[value], [role="radio"][value]');
+    for (const node of nodes) {
+      if (controlValue(node) === wanted && isCheckedControl(node)) return node;
+    }
+    return null;
+  }
 
   const state = {
     dom: { container: null, valSpan: null, timeSpan: null },
@@ -77,20 +137,44 @@
   };
 
   function isBuyActive(widget) {
-    if (widget.querySelector('button[value="BUY"][data-state="checked"]')) return true;
+    if (findCheckedValue(widget, 'BUY')) return true;
+    if (findCheckedValue(widget, 'SELL')) return false;
 
-    const checkedSide = widget.querySelector('[role="radiogroup"] [role="radio"][aria-checked="true"]');
+    const checkedSide = widget.querySelector(
+      '[role="radiogroup"] [role="radio"][aria-checked="true"], [role="radiogroup"] [role="radio"][data-state="checked"]'
+    );
+    const value = controlValue(checkedSide);
+    if (value === 'BUY') return true;
+    if (value === 'SELL') return false;
     return /\bbuy\b/i.test(checkedSide?.textContent || '');
   }
 
+  function readModeText(button) {
+    const text = normalizeSpaces(button?.textContent || '').toLowerCase();
+    return text === 'limit' || text === 'market' ? text : null;
+  }
+
+  // The closed Market/Limit control is one plain button: the current word plus a
+  // chevron. Menu items are separate and carry data-state even while unchecked.
+  function isClosedModeTrigger(button) {
+    if (!button || !isElementVisible(button) || !readModeText(button)) return false;
+    if (button.getAttribute('data-state') || button.getAttribute('aria-checked')) return false;
+    if ((button.getAttribute('role') || '') === 'menuitemradio') return false;
+    return true;
+  }
+
   function getOrderType(widget) {
-    const visibleModeButton = Array.from(widget.querySelectorAll('button')).find((button) => {
-      if (!isElementVisible(button)) return false;
-      const text = normalizeSpaces(button.textContent || '').toLowerCase();
-      return text === 'limit' || text === 'market';
+    if (findCheckedValue(widget, 'MARKET')) return 'market';
+    if (findCheckedValue(widget, 'LIMIT')) return 'limit';
+
+    const visibleModeButtons = Array.from(widget.querySelectorAll('button')).filter((button) => {
+      return isElementVisible(button) && !!readModeText(button);
     });
-    const visibleModeText = normalizeSpaces(visibleModeButton?.textContent || '').toLowerCase();
-    if (visibleModeText === 'limit' || visibleModeText === 'market') return visibleModeText;
+    const checkedMode = visibleModeButtons.find((button) => isCheckedControl(button));
+    if (checkedMode) return readModeText(checkedMode);
+
+    const triggers = visibleModeButtons.filter((button) => isClosedModeTrigger(button));
+    if (triggers.length === 1) return readModeText(triggers[0]);
 
     const sideSelectionBtn = widget.querySelector('button[aria-label="side selection"]');
     const sideLabel = normalizeSpaces(sideSelectionBtn?.querySelector('p,span')?.textContent || '').toLowerCase();
@@ -100,14 +184,10 @@
     if (/\blimit\b/i.test(sideText) && !/\bmarket\b/i.test(sideText)) return 'limit';
     if (/\bmarket\b/i.test(sideText) && !/\blimit\b/i.test(sideText)) return 'market';
 
-    if (widget.querySelector('button[value="MARKET"][data-state="checked"]')) return 'market';
-    if (widget.querySelector('button[value="LIMIT"][data-state="checked"]')) return 'limit';
-
-    const hasVisibleLimitAnchor = !!pickVisibleAnchor(widget, LIMIT_ANCHOR_SELECTOR);
-    const hasVisibleMarketAnchor = !!pickVisibleAnchor(widget, MARKET_ANCHOR_SELECTOR);
-
-    if (hasVisibleLimitAnchor && !hasVisibleMarketAnchor) return 'limit';
-    if (hasVisibleMarketAnchor && !hasVisibleLimitAnchor) return 'market';
+    // The checkout block matches the market anchor inside the limit form too.
+    // .limit-trade-info is rendered only for a limit order, so it wins.
+    if (pickVisibleAnchor(widget, LIMIT_ANCHOR_SELECTOR)) return 'limit';
+    if (pickVisibleAnchor(widget, MARKET_ANCHOR_SELECTOR)) return 'market';
 
     return null;
   }
@@ -174,6 +254,21 @@
     el.classList.remove('poly-anim-enter');
     void el.offsetWidth;
     el.classList.add('poly-anim-enter');
+  }
+
+  function setRowHidden(hidden) {
+    const row = state.dom.container;
+    if (!row) return;
+    row.style.display = '';
+    row.setAttribute('aria-hidden', hidden ? 'true' : 'false');
+    if (hidden) {
+      row.classList.add('poly-apr-hidden');
+      return;
+    }
+    if (!row.classList.contains('poly-apr-hidden')) return;
+    // Paint the collapsed box first, so a reinserted row eases open.
+    void row.offsetHeight;
+    row.classList.remove('poly-apr-hidden');
   }
 
   function scheduleUpdate() {
@@ -246,12 +341,27 @@
   }
 
   function readSelectedMarketName(widget) {
-    const selected = widget.querySelector('.text-base.font-semibold');
-    const text = normalizeSpaces(selected?.textContent || '');
-    if (!text || !text.includes('·')) return null;
+    if (!widget) return null;
 
-    const name = normalizeSpaces(text.split('·')[0] || '');
-    return name || null;
+    // Outcome prices use the same class and can appear before the group header.
+    const titled = widget.querySelectorAll('.text-base.font-semibold');
+    for (const node of titled) {
+      const text = normalizeSpaces(node.textContent || '');
+      const dot = text.indexOf('·');
+      if (dot <= 0) continue;
+      const name = normalizeSpaces(text.slice(0, dot));
+      if (name) return name;
+    }
+
+    // Group title is the leaf immediately before the "·" separator.
+    for (const node of widget.querySelectorAll('.truncate.min-w-0')) {
+      const text = normalizeSpaces(node.textContent || '');
+      if (!text || text.includes('·') || text.length > 80) continue;
+      const next = node.nextElementSibling;
+      if (next && normalizeSpaces(next.textContent || '') === '·') return text;
+    }
+
+    return null;
   }
 
   function elementOrAncestorContainsText(el, text) {
@@ -278,7 +388,9 @@
       if (widget.contains(button) || !isElementVisible(button)) continue;
 
       const text = normalizeSpaces(button.innerText || button.textContent || '');
-      if (!new RegExp(`^Buy\\s+${side}\\b`, 'i').test(text)) continue;
+      const matchesBuyLabel = new RegExp(`^Buy\\s+${side}\\b`, 'i').test(text);
+      const matchesValue = controlValue(button) === side.toUpperCase();
+      if (!matchesBuyLabel && !matchesValue) continue;
 
       const parsed = parseCents(text);
       if (parsed === null) continue;
@@ -318,7 +430,7 @@
       return null;
     }
 
-    const pathSlugs = location.pathname.split('/').filter(Boolean).slice(1);
+    const pathSlugs = getRouteParts().slice(1);
     let bestMatch = null;
 
     const visit = (value) => {
@@ -361,10 +473,10 @@
     const button = target.closest('button');
     if (!button || button.closest('#trade-widget')) return false;
 
-    const text = normalizeSpaces(button.textContent || '');
-    if (!/\bbuy\b/i.test(text)) return false;
+    if (controlValue(button) === 'SELL') return false;
 
-    return parseCents(text) !== null;
+    // Outcome rows keep a cents price. The verb is translated ("Kaufen", "Купить").
+    return parseCents(button.innerText || button.textContent || '') !== null;
   }
 
   function armMarketSwitchSettle() {
@@ -495,7 +607,7 @@
   let embeddedEventCache = { slug: null, texts: [], event: null };
 
   function getEmbeddedEvent() {
-    const slug = location.pathname.split('/').filter(Boolean)[1];
+    const slug = getRouteParts()[1];
     if (!slug) return null;
 
     const texts = Array.from(document.scripts)
@@ -549,11 +661,15 @@
 
     const widget = getActiveTradeWidget();
     const name = widget ? readSelectedMarketName(widget) : null;
-    const marketSlug = location.pathname.split('/').filter(Boolean)[2];
-    return name
-      ? event.markets.find((item) => normalizeSpaces(item.groupItemTitle) === name)
-      : event.markets.find((item) => item.slug === marketSlug) ||
-        (event.markets.length === 1 ? event.markets[0] : null);
+    if (name) {
+      const named = event.markets.find((item) => normalizeSpaces(item.groupItemTitle) === name)
+        || event.markets.find((item) => normalizeSpaces(item.question) === name);
+      if (named) return named;
+    }
+
+    const marketSlug = getRouteParts()[2];
+    return event.markets.find((item) => item.slug === marketSlug) ||
+      (event.markets.length === 1 ? event.markets[0] : null);
   }
 
   function getSelectedMarketEndDate() {
@@ -1093,6 +1209,12 @@
     container.id = 'poly-custom-apr';
     container.className = 'poly-apr-row';
 
+    const clip = document.createElement('div');
+    clip.className = 'poly-apr-clip';
+
+    const body = document.createElement('div');
+    body.className = 'poly-apr-body';
+
     const label = document.createElement('p');
     label.className = 'text-text-primary text-base leading-5 font-medium';
     label.textContent = 'Est. APR';
@@ -1109,8 +1231,10 @@
 
     right.appendChild(valSpan);
     right.appendChild(timeSpan);
-    container.appendChild(label);
-    container.appendChild(right);
+    body.appendChild(label);
+    body.appendChild(right);
+    clip.appendChild(body);
+    container.appendChild(clip);
 
     state.dom = { container, valSpan, timeSpan };
     state.lastColorMode = 'inactive';
@@ -1139,7 +1263,8 @@
       return true;
     }
 
-    return false;
+    // A brief unknown mode must not freeze a row that is already on screen.
+    return !!(state.dom.container.isConnected && widget.contains(state.dom.container));
   }
 
   function parseCents(text) {
@@ -1155,17 +1280,23 @@
       '#outcome-buttons [data-state="checked"], ' +
       '#outcome-buttons [role="radio"][aria-checked="true"], ' +
       '.trading-button[data-state="checked"], ' +
-      '.trading-button[aria-checked="true"]'
+      '.trading-button[aria-checked="true"], ' +
+      'button[value="YES"][data-state="checked"], button[value="NO"][data-state="checked"], ' +
+      'button[value="YES"][aria-checked="true"], button[value="NO"][aria-checked="true"]'
     );
 
     let fallbackParsed = null;
     let selectedSideText = null;
+    let selectedSide = null;
 
     // React transitions can keep stale checked radios in the DOM briefly.
     // Prefer only visible checked outcomes to avoid reading stale prices.
     for (const candidate of candidates) {
       if (!selectedSideText && isElementVisible(candidate)) {
         selectedSideText = normalizeSpaces(candidate.textContent || '');
+        const value = controlValue(candidate);
+        if (value === 'YES' || value === 'NO') selectedSide = value.toLowerCase();
+        else if (/^(?:yes|no)$/i.test(selectedSideText)) selectedSide = selectedSideText.toLowerCase();
       }
 
       const parsed = parseCents(candidate.innerText || candidate.textContent || '');
@@ -1179,13 +1310,20 @@
       return parsed;
     }
 
-    const externalParsed = readExternalOutcomePrice(widget, selectedSideText);
+    if (!selectedSide) {
+      const yes = findCheckedValue(widget, 'YES');
+      const no = findCheckedValue(widget, 'NO');
+      if (yes && isElementVisible(yes)) selectedSide = 'yes';
+      else if (no && isElementVisible(no)) selectedSide = 'no';
+    }
+
+    const externalParsed = readExternalOutcomePrice(widget, selectedSide || selectedSideText);
     if (externalParsed !== null) {
       state.lastOutcomePrice = externalParsed;
       return externalParsed;
     }
 
-    const embeddedParsed = readEmbeddedOutcomePrice(selectedSideText);
+    const embeddedParsed = readEmbeddedOutcomePrice(selectedSide || selectedSideText);
     if (embeddedParsed !== null) {
       state.lastOutcomePrice = embeddedParsed;
       return embeddedParsed;
@@ -1243,11 +1381,9 @@
     state.lastBuyActive = buyActive;
 
     if (!buyActive) {
-      if (state.dom.container) state.dom.container.style.display = 'none';
+      setRowHidden(true);
       return;
     }
-
-    if (shouldWaitForSideSwitchSettle(true)) return;
 
     const orderType = getOrderType(widget);
     if (orderType === 'market') {
@@ -1260,10 +1396,16 @@
       state.lastMarketLabel = null;
     }
 
-    if (shouldWaitForMarketSwitchSettle(orderType)) return;
+    if (shouldWaitForMarketSwitchSettle(orderType)) {
+      if (state.dom.container && widget.contains(state.dom.container)) setRowHidden(false);
+      return;
+    }
 
     if (!ensureInserted(widget)) return;
-    state.dom.container.style.display = 'flex';
+    // Keep the row in the Buy layout while the price settles, so it does not pop in late.
+    setRowHidden(false);
+
+    if (shouldWaitForSideSwitchSettle(true)) return;
 
     const resolution = getMarketResolutionState();
     const price = resolution ? null : readPrice(widget);
