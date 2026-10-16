@@ -10,7 +10,7 @@ Chrome extension that adds a native-style APR (Annual Percentage Rate) block to 
 
 ## Install
 
-**Get the latest version on [GitHub](https://github.com/DennisLypovetsky/polymarket-apr/releases/latest).** The [Chrome Web Store](https://chromewebstore.google.com/detail/polymarket-apr/dainflhaaolcjggcopmjhpaodnleicib) is stuck at **v1.2.9** because further updates were blocked.
+**The latest version is always on [GitHub](https://github.com/DennisLypovetsky/polymarket-apr/releases/latest).** The [Chrome Web Store](https://chromewebstore.google.com/detail/polymarket-apr/dainflhaaolcjggcopmjhpaodnleicib) is behind and currently stuck at **v1.2.9**.
 
 ### Install the latest release in Chrome
 
