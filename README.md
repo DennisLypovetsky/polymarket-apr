@@ -4,7 +4,9 @@ Chrome extension that adds a native-style APR (Annual Percentage Rate) block to 
 
 ## Preview
 
-<img src="pictures/screenshots/Screenshot.png" alt="Polymarket APR extension preview" width="960" />
+<a href="https://github.com/DennisLypovetsky/polymarket-apr/releases/latest">
+  <img src="pictures/screenshots/Screenshot.png" alt="Polymarket APR extension preview" width="960" />
+</a>
 
 ## Install
 
@@ -12,10 +14,11 @@ Chrome extension that adds a native-style APR (Annual Percentage Rate) block to 
 
 ### Install the latest release in Chrome
 
-1. Download `polymarket-apr-v*.zip` from the [latest release](https://github.com/DennisLypovetsky/polymarket-apr/releases/latest) → **Assets**, then unzip it.
-2. Open `chrome://extensions` and turn on **Developer mode**.
-3. Click **Load unpacked** and select the unzipped folder containing `manifest.json`. Keep this folder.
-4. Disable any older copy of the extension, then reload Polymarket.
+1. [Download the latest release](https://github.com/DennisLypovetsky/polymarket-apr/releases/latest) → **Assets** → `polymarket-apr-v*.zip`. Unzip it.
+2. Open `chrome://extensions` → turn on **Developer mode**.
+3. Click **Load unpacked** → select the unzipped folder.
+
+Keep the folder, disable any older copy, and reload Polymarket.
 
 ## Repository Structure
 
