@@ -1,0 +1,149 @@
+:root {
+  color-scheme: light dark;
+  --bg: #ffffff;
+  --text: #1a1d23;
+  --muted: #6b7280;
+  --border: #e5e7eb;
+  --surface: #f5f6f8;
+  --accent: #2e5cff;
+  --accent-text: #ffffff;
+  --dot: #ff9500;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #1d2129;
+    --text: #e8eaed;
+    --muted: #9aa0a9;
+    --border: #2f3540;
+    --surface: #262b35;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  width: 320px;
+  margin: 0;
+  padding: 14px 16px 16px;
+  background: var(--bg);
+  color: var(--text);
+  font: 13px/1.45 system-ui, -apple-system, 'Segoe UI', sans-serif;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border);
+  font-weight: 600;
+}
+
+.brand img {
+  border-radius: 5px;
+}
+
+.installed {
+  margin-left: auto;
+  color: var(--muted);
+  font-weight: 400;
+  font-variant-numeric: tabular-nums;
+}
+
+h1 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 14px 0 2px;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+h1 .dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--dot);
+}
+
+.subtitle {
+  margin: 0;
+  color: var(--muted);
+}
+
+.notes {
+  max-height: 220px;
+  overflow-y: auto;
+  margin: 12px 0 0;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: var(--surface);
+}
+
+.notes h2 {
+  margin: 0 0 6px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.notes p,
+.notes ul {
+  margin: 0 0 6px;
+}
+
+.notes ul {
+  padding-left: 18px;
+}
+
+.notes > :last-child {
+  margin-bottom: 0;
+}
+
+.hint {
+  margin: 10px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+button {
+  flex: 1;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+button:hover {
+  background: var(--surface);
+}
+
+button.primary {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--accent-text);
+}
+
+button.primary:hover {
+  filter: brightness(1.08);
+}
+
+button:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
