@@ -20,6 +20,12 @@ Chrome extension that adds a native-style APR (Annual Percentage Rate) block to 
 
 Keep the folder, disable any older copy, and reload Polymarket.
 
+### Updates
+
+Since v1.4.0, the extension checks GitHub for new releases. When one is out, a red dot appears on its toolbar icon. Click the icon to see what changed, get the update, or skip that version.
+
+To update, replace the files in the same folder with the new release, then click **Reload** on the extension card in `chrome://extensions`.
+
 <a href="https://github.com/DennisLypovetsky/polymarket-apr/releases">
   <img src="pictures/guides/installation.png" alt="Install Polymarket APR: download and unzip, enable Developer mode, then load the extracted folder." width="960" />
 </a>
