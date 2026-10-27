@@ -742,9 +742,9 @@
       return { label: '--', title: fetched.controller
         ? 'Checking market resolution.' : 'Market resolution could not be verified.' };
     }
-    const scheduled = getScheduledAwardDate();
+    const scheduled = getScheduledEventDate();
     if (scheduled && scheduled.date.getTime() <= Date.now()) {
-      return { label: 'Awaiting result', title: 'Scheduled award date has passed; awaiting a confirmed result.' };
+      return { label: 'Awaiting result', title: 'Expected event date has passed; awaiting a confirmed result.' };
     }
     return null;
   }
@@ -1142,7 +1142,7 @@
   }
 
   function getSmartDate() {
-    const scheduled = getScheduledAwardDate();
+    const scheduled = getScheduledEventDate();
     if (scheduled) return scheduled.date;
     const eventData = getEventJsonLd();
     // An event can contain outcomes ending earlier than its overall deadline.
@@ -1160,6 +1160,21 @@
     if (isValidDate(visibleExpiryDate)) return visibleExpiryDate;
 
     return null;
+  }
+
+  function getScheduledEventDate() {
+    const award = getScheduledAwardDate();
+    if (award) return award;
+
+    const rules = normalizeSpaces(getSelectedMarket()?.description || getRulesText());
+    // Only accept an unconditional Yes/No rule tied to one full calendar date.
+    // Incidental dates, deadlines and additional conditions keep the normal fallback.
+    const match = rules.match(/^This market will resolve to ["\u201c]?Yes["\u201d]? if (?![^.?!]*\b(?:if|unless|provided|and|or)\b)[^.?!]+?\b(?:happen|happens|occur|occurs|take place) on ([A-Za-z]+)\s+(\d{1,2}),\s*(\d{4})\.\s*Otherwise,? this market will resolve to ["\u201c]?No["\u201d]?\./i);
+    const parts = parseOutcomeMatch(match, 'scheduled');
+    if (!parts?.year || !isValidCalendarDate(parts.year, parts.monthIndex, parts.day)) return null;
+
+    // Rules specify a day, not a time or a guaranteed settlement instant.
+    return { date: new Date(Date.UTC(parts.year, parts.monthIndex, parts.day, 23, 59, 59)), hasTime: false };
   }
 
   function getScheduledAwardDate() {
@@ -1409,7 +1424,7 @@
 
     const resolution = getMarketResolutionState();
     const price = resolution ? null : readPrice(widget);
-    const scheduled = resolution ? null : getScheduledAwardDate();
+    const scheduled = resolution ? null : getScheduledEventDate();
     const endDate = resolution ? null : getSmartDate();
     const inputKey = `${orderType || 'unknown'}|${resolution?.label || ''}|${price}|${endDate ? endDate.getTime() : 'na'}`;
 
